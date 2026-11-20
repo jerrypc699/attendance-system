@@ -354,6 +354,23 @@
             checkEmployeeStatus();
         });
 
+        // Helper: Convert UTC timestamp correctly to Local Device Time (e.g. Cairo Time UTC+2)
+        function formatLocalTime(ts) {
+            if (!ts) return '--';
+            let s = String(ts).trim();
+            if (s.includes('T')) {
+                const parts = s.split('T');
+                if (!parts[1].includes('Z') && !parts[1].includes('+') && !parts[1].includes('-')) {
+                    s += 'Z';
+                }
+            } else if (!s.includes('Z') && !s.includes('+')) {
+                s = s.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return String(ts);
+            return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        }
+
         // Helper: Capture live camera snapshot as base64 JPEG
         function captureCameraSnapshot() {
             try {
@@ -615,7 +632,7 @@
                         <p><strong>الفرع:</strong> ${pData.telemetry_details?.branch || 'الفرع الرئيسي'}</p>
                         <p><strong>المسافة:</strong> ${pData.telemetry_details?.distance_meters} متر</p>
                         <p><strong>تطابق الوجه:</strong> ${((pData.telemetry_details?.face_similarity || 1) * 100).toFixed(1)}%</p>
-                        <p><strong>التوقيت:</strong> ${new Date(pData.server_timestamp).toLocaleTimeString('ar-EG')}</p>
+                        <p><strong>التوقيت:</strong> ${formatLocalTime(pData.server_timestamp)}</p>
                     `, liveSnapshot);
                 } else {
                     showResult(false, "تم رفض البصمة!", `

@@ -198,13 +198,21 @@ def get_attendance_logs(limit: int = 50, db: Session = Depends(get_db)):
     for l in logs:
         emp = db.query(Employee).filter(Employee.id == l.employee_id).first()
         br = db.query(Branch).filter(Branch.id == l.branch_id).first() if l.branch_id else None
+        
+        # Ensure UTC timezone is explicitly attached so frontend converts to user local time
+        ts = l.server_timestamp
+        if ts:
+            ts_iso = ts.replace(tzinfo=timezone.utc).isoformat() if ts.tzinfo is None else ts.isoformat()
+        else:
+            ts_iso = None
+
         result.append({
             "id": l.id,
             "employee_id": l.employee_id,
             "employee_name": emp.full_name if emp else "Unknown",
             "branch_name": br.name if br else "Unknown",
             "punch_type": l.punch_type,
-            "server_timestamp": l.server_timestamp,
+            "server_timestamp": ts_iso,
             "status": l.status,
             "rejection_reason": l.rejection_reason,
             "distance_to_branch_meters": l.distance_to_branch_meters,
@@ -224,7 +232,25 @@ def clear_attendance_logs(db: Session = Depends(get_db)):
 
 @router.get("/fraud-alerts")
 def get_fraud_alerts(limit: int = 50, db: Session = Depends(get_db)):
-    return db.query(FraudAlert).order_by(FraudAlert.created_at.desc()).limit(limit).all()
+    alerts = db.query(FraudAlert).order_by(FraudAlert.created_at.desc()).limit(limit).all()
+    result = []
+    for f in alerts:
+        ts = f.created_at
+        if ts:
+            ts_iso = ts.replace(tzinfo=timezone.utc).isoformat() if ts.tzinfo is None else ts.isoformat()
+        else:
+            ts_iso = None
+        result.append({
+            "id": f.id,
+            "employee_id": f.employee_id,
+            "device_id": f.device_id,
+            "alert_type": f.alert_type,
+            "severity": f.severity,
+            "details": f.details,
+            "client_ip": f.client_ip,
+            "created_at": ts_iso
+        })
+    return result
 
 @router.delete("/fraud-alerts/clear")
 def clear_fraud_alerts(db: Session = Depends(get_db)):

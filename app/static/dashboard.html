@@ -543,6 +543,39 @@
         let currentDevices = [];
         let currentSettings = {};
 
+        // Helper: Convert UTC timestamp correctly to Local Device Time (e.g. Cairo Time UTC+2)
+        function formatLocalTime(ts) {
+            if (!ts) return '--';
+            let s = String(ts).trim();
+            if (s.includes('T')) {
+                const parts = s.split('T');
+                if (!parts[1].includes('Z') && !parts[1].includes('+') && !parts[1].includes('-')) {
+                    s += 'Z';
+                }
+            } else if (!s.includes('Z') && !s.includes('+')) {
+                s = s.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return String(ts);
+            return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        }
+
+        function formatLocalDateTime(ts) {
+            if (!ts) return '--';
+            let s = String(ts).trim();
+            if (s.includes('T')) {
+                const parts = s.split('T');
+                if (!parts[1].includes('Z') && !parts[1].includes('+') && !parts[1].includes('-')) {
+                    s += 'Z';
+                }
+            } else if (!s.includes('Z') && !s.includes('+')) {
+                s = s.replace(' ', 'T') + 'Z';
+            }
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return String(ts);
+            return d.toLocaleDateString('ar-EG') + ' ' + d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        }
+
         // Tab Switching
         function switchTab(tabId) {
             document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
@@ -749,7 +782,7 @@
                         <td class="p-2.5 font-bold text-slate-800">${l.employee_name}</td>
                         <td class="p-2.5"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${l.punch_type === 'CHECK_IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${l.punch_type === 'CHECK_IN' ? 'حضور' : 'انصراف'}</span></td>
                         <td class="p-2.5 font-mono text-slate-600">${Math.round(l.distance_to_branch_meters || 0)} م</td>
-                        <td class="p-2.5 font-mono text-slate-400">${new Date(l.server_timestamp).toLocaleTimeString('ar-EG')}</td>
+                        <td class="p-2.5 font-mono text-slate-400">${formatLocalTime(l.server_timestamp)}</td>
                     </tr>
                 `).join('');
             }
@@ -762,7 +795,7 @@
                     <tr class="hover:bg-slate-50 transition">
                         <td class="p-3 text-center">
                             ${l.face_snapshot ? `
-                                <img src="${l.face_snapshot}" onclick="openPhotoModal('${l.face_snapshot}', '${l.employee_name}', '${l.punch_type}', '${new Date(l.server_timestamp).toLocaleString('ar-EG')}', '${l.status}', '${l.face_similarity_score}')" class="w-10 h-10 rounded-full object-cover border-2 border-indigo-500 shadow-md cursor-pointer hover:scale-110 transition mx-auto" title="اضغط لتكبير صورة الموظف">
+                                <img src="${l.face_snapshot}" onclick="openPhotoModal('${l.face_snapshot}', '${l.employee_name}', '${l.punch_type}', '${formatLocalDateTime(l.server_timestamp)}', '${l.status}', '${l.face_similarity_score}')" class="w-10 h-10 rounded-full object-cover border-2 border-indigo-500 shadow-md cursor-pointer hover:scale-110 transition mx-auto" title="اضغط لتكبير صورة الموظف">
                             ` : `
                                 <span class="text-slate-400 text-[10px]">بدون صورة</span>
                             `}
@@ -774,7 +807,7 @@
                         <td class="p-3 font-mono">${l.distance_to_branch_meters ? Math.round(l.distance_to_branch_meters) + 'م' : '--'}</td>
                         <td class="p-3 font-mono">${l.face_similarity_score ? (l.face_similarity_score).toFixed(3) : '--'}</td>
                         <td class="p-3 text-rose-600 text-[11px] font-mono">${l.rejection_reason || '--'}</td>
-                        <td class="p-3 font-mono text-slate-400">${new Date(l.server_timestamp).toLocaleTimeString('ar-EG')}</td>
+                        <td class="p-3 font-mono text-slate-400">${formatLocalTime(l.server_timestamp)}</td>
                     </tr>
                 `).join('');
             }
@@ -792,7 +825,7 @@
                     <tr>
                         <td class="p-2.5 font-bold text-rose-700 text-[11px]">${f.alert_type}</td>
                         <td class="p-2.5 font-mono text-[10px] text-slate-600">${JSON.stringify(f.details).slice(0, 35)}...</td>
-                        <td class="p-2.5 font-mono text-slate-400 text-[10px]">${new Date(f.created_at).toLocaleTimeString('ar-EG')}</td>
+                        <td class="p-2.5 font-mono text-slate-400 text-[10px]">${formatLocalTime(f.created_at)}</td>
                     </tr>
                 `).join('');
 
@@ -801,7 +834,7 @@
                         <td class="p-3 font-bold text-rose-700">${f.alert_type}</td>
                         <td class="p-3"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${f.severity === 'CRITICAL' ? 'bg-rose-600 text-white' : 'bg-amber-100 text-amber-800'}">${f.severity}</span></td>
                         <td class="p-3 font-mono text-slate-600 text-[11px]">${JSON.stringify(f.details)}</td>
-                        <td class="p-3 font-mono text-slate-400">${new Date(f.created_at).toLocaleTimeString('ar-EG')}</td>
+                        <td class="p-3 font-mono text-slate-400">${formatLocalTime(f.created_at)}</td>
                     </tr>
                 `).join('');
             }
@@ -1086,7 +1119,7 @@
                             <p><strong>الموظف:</strong> ${pData.employee_name}</p>
                             <p><strong>الفرع:</strong> ${pData.telemetry_details?.branch} (المسافة: ${pData.telemetry_details?.distance_meters} متر)</p>
                             <p><strong>تطابق ملامح الوجه (Cosine Similarity):</strong> ${((pData.telemetry_details?.face_similarity || 1) * 100).toFixed(1)}%</p>
-                            <p><strong>توقيت السيرفر الرسمي:</strong> ${new Date(pData.server_timestamp).toLocaleTimeString('ar-EG')}</p>
+                            <p><strong>توقيت السيرفر الرسمي:</strong> ${formatLocalTime(pData.server_timestamp)}</p>
                         </div>
                     `;
                 } else {
