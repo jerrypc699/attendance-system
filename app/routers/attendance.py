@@ -359,6 +359,7 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
             is_mock_location_detected=payload.is_mock_location,
             face_similarity_score=similarity,
             liveness_score=liveness_score,
+            face_snapshot=payload.face_snapshot,
             wifi_bssid_detected=payload.wifi_bssid,
             wifi_bssid_verified=wifi_verified,
             beacon_uuid_detected=payload.beacon_uuid,
@@ -403,6 +404,7 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
         beacon_verified=beacon_verified,
         face_similarity_score=similarity,
         liveness_score=liveness_score,
+        face_snapshot=payload.face_snapshot,
         active_liveness_verified=True,
         device_integrity_verified=True,
         client_ip=client_ip
@@ -423,6 +425,7 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
             "distance_meters": distance_m,
             "face_similarity": similarity,
             "liveness_score": liveness_score,
+            "face_snapshot": approved_log.face_snapshot,
             "wifi_verified": wifi_verified,
             "beacon_verified": beacon_verified
         }

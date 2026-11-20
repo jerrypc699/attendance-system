@@ -349,7 +349,16 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
         desiredAccuracy: LocationAccuracy.high,
       );
 
-      // Step 3: Get enrolled face vector
+      // Step 3: Get enrolled face vector & live snapshot
+      String? snapshotBase64;
+      try {
+        if (_controller != null && _controller!.value.isInitialized) {
+          final xfile = await _controller!.takePicture();
+          final bytes = await xfile.readAsBytes();
+          snapshotBase64 = "data:image/jpeg;base64,${base64Encode(bytes)}";
+        }
+      } catch (_) {}
+
       final faceRes = await http.get(Uri.parse('$serverUrl/api/v1/admin/employees/$employeeCode/face-vector'));
       List faceVec = [];
       if (faceRes.statusCode == 200) {
@@ -368,6 +377,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           'nonce': nonce,
           'device_fingerprint': _getDeviceFingerprint(),
           'face_embedding': faceVec,
+          'face_snapshot': snapshotBase64,
           'liveness_proof': {
             'actions_performed': actions,
             'motion_timestamp_ms': [DateTime.now().millisecondsSinceEpoch],

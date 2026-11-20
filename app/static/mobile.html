@@ -354,6 +354,28 @@
             checkEmployeeStatus();
         });
 
+        // Helper: Capture live camera snapshot as base64 JPEG
+        function captureCameraSnapshot() {
+            try {
+                const video = document.getElementById('webcam');
+                const canvas = document.getElementById('snapshot-canvas');
+                if (video && video.videoWidth > 0) {
+                    canvas.width = 240;
+                    canvas.height = 240;
+                    const ctx = canvas.getContext('2d');
+                    ctx.save();
+                    ctx.translate(240, 0);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(video, 0, 0, 240, 240);
+                    ctx.restore();
+                    return canvas.toDataURL('image/jpeg', 0.75);
+                }
+            } catch (e) {
+                console.warn("Could not capture snapshot", e);
+            }
+            return null;
+        }
+
         // Helper: Generate persistent hardware fingerprint
         function getOrCreateDeviceFingerprint() {
             let myFp = localStorage.getItem('attendance_device_fp');
@@ -399,6 +421,7 @@
             try {
                 const deviceFp = getOrCreateDeviceFingerprint();
                 const faceVector = generateFaceEmbedding(code);
+                const snapshot = captureCameraSnapshot();
 
                 const res = await fetch('/api/v1/attendance/register-and-enroll', {
                     method: 'POST',
@@ -427,7 +450,7 @@
                         <p><strong>كود الموظف:</strong> ${data.employee_code}</p>
                         <p><strong>القسم:</strong> ${data.department}</p>
                         <p class="text-emerald-400 font-bold mt-2">تم التقاط بصمة الوجه الرقمية بنجاح وربط هذا الهاتف بالموظف. يمكنك الآن البدء في تسجيل الحضور والانصراف فوراً!</p>
-                    `);
+                    `, snapshot);
 
                     // Clear inputs
                     document.getElementById('reg-name').value = '';
@@ -557,7 +580,9 @@
                     faceEmbedding = generateFaceEmbedding(empCode);
                 }
 
-                // 3. Send Punch Request
+                // 3. Capture camera snapshot & Send Punch Request
+                const liveSnapshot = captureCameraSnapshot();
+
                 const punchRes = await fetch('/api/v1/attendance/punch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -567,6 +592,7 @@
                         nonce: chData.nonce,
                         device_fingerprint: myDeviceFp,
                         face_embedding: faceEmbedding,
+                        face_snapshot: liveSnapshot,
                         liveness_proof: {
                             actions_performed: chData.expected_actions,
                             motion_timestamp_ms: [Date.now()],
@@ -590,12 +616,12 @@
                         <p><strong>المسافة:</strong> ${pData.telemetry_details?.distance_meters} متر</p>
                         <p><strong>تطابق الوجه:</strong> ${((pData.telemetry_details?.face_similarity || 1) * 100).toFixed(1)}%</p>
                         <p><strong>التوقيت:</strong> ${new Date(pData.server_timestamp).toLocaleTimeString('ar-EG')}</p>
-                    `);
+                    `, liveSnapshot);
                 } else {
                     showResult(false, "تم رفض البصمة!", `
                         <p class="text-rose-400 font-bold">${pData.rejection_reason}</p>
                         <p class="text-slate-400 text-[10px] mt-2">تم تسجيل هذا الحادث في سجل التلاعب لإدارة الشركة.</p>
-                    `);
+                    `, liveSnapshot);
                 }
 
                 prompt.innerText = "ضع وجهك داخل الدائرة";
@@ -608,7 +634,7 @@
             }
         }
 
-        function showResult(success, title, detailsHtml) {
+        function showResult(success, title, detailsHtml, snapshot = null) {
             const modal = document.getElementById('result-modal');
             const card = document.getElementById('modal-card');
             const icon = document.getElementById('modal-icon');
@@ -616,17 +642,29 @@
             const detailsEl = document.getElementById('modal-details');
 
             modal.classList.remove('hidden');
+            let photoHeader = '';
+            if (snapshot) {
+                photoHeader = `
+                    <div class="flex justify-center mb-3">
+                        <div class="relative">
+                            <img src="${snapshot}" class="w-24 h-24 rounded-full object-cover border-4 ${success ? 'border-emerald-500 shadow-emerald-950' : 'border-rose-500 shadow-rose-950'} shadow-2xl">
+                            <span class="absolute bottom-0 right-0 ${success ? 'bg-emerald-600' : 'bg-rose-600'} text-white rounded-full p-1 text-[10px]">📷</span>
+                        </div>
+                    </div>
+                `;
+            }
+
             if (success) {
-                card.className = "bg-slate-900 rounded-3xl p-6 max-w-sm w-full border border-emerald-500/50 text-center space-y-4 shadow-2xl shadow-emerald-950";
-                icon.innerText = "✅";
-                titleEl.className = "text-xl font-black text-emerald-400";
+                card.className = "bg-slate-900 rounded-3xl p-6 max-w-sm w-full border border-emerald-500/50 text-center space-y-3 shadow-2xl shadow-emerald-950";
+                icon.innerText = snapshot ? "" : "✅";
+                titleEl.className = "text-lg font-black text-emerald-400";
             } else {
-                card.className = "bg-slate-900 rounded-3xl p-6 max-w-sm w-full border border-rose-500/50 text-center space-y-4 shadow-2xl shadow-rose-950";
-                icon.innerText = "❌";
-                titleEl.className = "text-xl font-black text-rose-400";
+                card.className = "bg-slate-900 rounded-3xl p-6 max-w-sm w-full border border-rose-500/50 text-center space-y-3 shadow-2xl shadow-rose-950";
+                icon.innerText = snapshot ? "" : "❌";
+                titleEl.className = "text-lg font-black text-rose-400";
             }
             titleEl.innerText = title;
-            detailsEl.innerHTML = detailsHtml;
+            detailsEl.innerHTML = photoHeader + detailsHtml;
         }
 
         function closeResultModal() {

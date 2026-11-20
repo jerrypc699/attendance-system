@@ -5,9 +5,18 @@ import os
 from app.config import settings
 from app.database import engine, Base
 from app.routers import attendance, admin
+from sqlalchemy import text
 
 # Create tables in database on startup
 Base.metadata.create_all(bind=engine)
+
+# Auto-migration for face_snapshot column if it doesn't exist
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE attendance_logs ADD COLUMN face_snapshot TEXT;"))
+        conn.commit()
+except Exception:
+    pass # Column already exists or table newly created
 
 app = FastAPI(
     title=settings.APP_NAME,

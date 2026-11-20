@@ -108,6 +108,7 @@ def test_happy_path_punch_in():
         "nonce": nonce,
         "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
         "face_embedding": enrolled_face,
+        "face_snapshot": "data:image/jpeg;base64,sample_snapshot_base64_data",
         "liveness_proof": {
             "actions_performed": actions,
             "motion_timestamp_ms": [100, 300, 600],
@@ -127,6 +128,13 @@ def test_happy_path_punch_in():
     assert punch_data["success"] is True
     assert punch_data["status"] == "APPROVED"
     assert punch_data["employee_name"] == "Ahmed Mostafa"
+
+    # Verify face snapshot is logged and returned in admin logs
+    logs_res = client.get("/api/v1/admin/attendance-logs")
+    assert logs_res.status_code == 200
+    logs = logs_res.json()
+    assert len(logs) > 0
+    assert "face_snapshot" in logs[0]
 
 
 def test_cheat_attempt_mock_gps():
@@ -149,6 +157,7 @@ def test_cheat_attempt_mock_gps():
         "nonce": nonce,
         "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
         "face_embedding": enrolled_face,
+        "face_snapshot": "data:image/jpeg;base64,sample_snapshot_base64_data",
         "liveness_proof": {
             "actions_performed": actions,
             "motion_timestamp_ms": [100, 300],
@@ -189,6 +198,7 @@ def test_cheat_attempt_out_of_geofence():
         "nonce": nonce,
         "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
         "face_embedding": enrolled_face,
+        "face_snapshot": "data:image/jpeg;base64,sample_snapshot_base64_data",
         "liveness_proof": {
             "actions_performed": actions,
             "motion_timestamp_ms": [100, 300],
@@ -227,6 +237,7 @@ def test_cheat_attempt_face_spoof_low_liveness():
         "nonce": nonce,
         "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
         "face_embedding": enrolled_face,
+        "face_snapshot": "data:image/jpeg;base64,sample_snapshot_base64_data",
         "liveness_proof": {
             "actions_performed": actions,
             "motion_timestamp_ms": [100],
@@ -275,6 +286,7 @@ def test_cheat_attempt_replay_attack():
         "nonce": nonce,
         "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
         "face_embedding": enrolled_face,
+        "face_snapshot": "data:image/jpeg;base64,sample_snapshot_base64_data",
         "liveness_proof": {
             "actions_performed": actions,
             "motion_timestamp_ms": [100, 300],

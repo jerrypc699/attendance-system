@@ -210,6 +210,7 @@ def get_attendance_logs(limit: int = 50, db: Session = Depends(get_db)):
             "distance_to_branch_meters": l.distance_to_branch_meters,
             "face_similarity_score": l.face_similarity_score,
             "liveness_score": l.liveness_score,
+            "face_snapshot": l.face_snapshot,
             "is_mock_location_detected": l.is_mock_location_detected,
             "wifi_bssid_verified": l.wifi_bssid_verified
         })

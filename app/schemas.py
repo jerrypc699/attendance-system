@@ -110,6 +110,7 @@ class PunchVerificationRequest(BaseModel):
     # Biometric Telemetry
     face_embedding: List[float]
     liveness_proof: ActiveLivenessProof
+    face_snapshot: Optional[str] = None # Base64 Data URL or image snapshot taken from camera at punch time
 
     # Geo Telemetry
     latitude: float

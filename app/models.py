@@ -116,6 +116,7 @@ class AttendanceLog(Base):
     face_similarity_score = Column(Float, nullable=True)
     liveness_score = Column(Float, nullable=True)
     active_liveness_verified = Column(Boolean, default=False)
+    face_snapshot = Column(Text, nullable=True) # Real-time base64 image or photo URL captured during punch
 
     # Integrity
     device_integrity_verified = Column(Boolean, default=False)
