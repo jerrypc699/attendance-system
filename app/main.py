@@ -40,6 +40,18 @@ app.include_router(admin.router)
 DASHBOARD_FILE = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
 MOBILE_FILE = os.path.join(os.path.dirname(__file__), "static", "mobile.html")
 MANIFEST_FILE = os.path.join(os.path.dirname(__file__), "static", "manifest.json")
+APK_FILE = os.path.join(os.path.dirname(__file__), "static", "app-release.apk")
+
+@app.get("/download-apk")
+@app.get("/app-release.apk")
+def download_apk():
+    if os.path.exists(APK_FILE):
+        return FileResponse(
+            APK_FILE,
+            media_type="application/vnd.android.package-archive",
+            filename="AttendanceApp.apk"
+        )
+    return HTMLResponse("<h2>ملف الـ APK غير متوفر حالياً</h2>", status_code=404)
 
 @app.get("/manifest.json")
 def serve_manifest():

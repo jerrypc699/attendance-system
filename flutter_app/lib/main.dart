@@ -59,6 +59,24 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     _initCamera();
   }
 
+  Future<void> _initCamera() async {
+    if (cameras.isEmpty) return;
+    final frontCam = cameras.firstWhere(
+      (c) => c.lensDirection == CameraLensDirection.front,
+      orElse: () => cameras.first,
+    );
+
+    _controller = CameraController(frontCam, ResolutionPreset.medium, enableAudio: false);
+    await _controller!.initialize();
+    if (mounted) setState(() => isCameraInitialized = true);
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchEmployeeData(String code) async {
     final cleanCode = code.trim();
     if (cleanCode.isEmpty) {
