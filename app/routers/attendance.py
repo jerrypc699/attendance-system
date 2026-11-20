@@ -247,7 +247,7 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
 
     # Layer 3: Biometric & Liveness Verification
     bio_ok, bio_err, similarity, liveness_score = BiometricVerifier.verify_liveness_and_face(
-        db, employee, payload.nonce, payload.face_embedding, payload.liveness_proof
+        db, employee, payload.nonce, payload.face_embedding, payload.liveness_proof, payload.face_snapshot
     )
 
     if not bio_ok:

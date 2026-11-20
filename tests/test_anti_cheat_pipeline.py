@@ -341,3 +341,52 @@ def test_register_and_enroll_from_mobile():
     status_data = status_res.json()
     assert status_data["is_face_enrolled"] is True
     assert status_data["is_device_bound"] is True
+
+
+def test_cheat_attempt_ceiling_or_no_face_image():
+    """Attack 7: Reject punch if camera is pointed at a ceiling, wall, or empty background."""
+    from PIL import Image
+    import io, base64
+
+    # Create 240x240 white ceiling image
+    ceiling_img = Image.new("RGB", (240, 240), color=(220, 220, 220))
+    buf = io.BytesIO()
+    ceiling_img.save(buf, format="JPEG")
+    ceiling_b64 = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    # Get challenge
+    res = client.post("/api/v1/attendance/challenge", json={
+        "employee_code": "EMP-1001",
+        "device_fingerprint": "sha256_hardware_fingerprint_employee_1"
+    })
+    ch_data = res.json()
+
+    db = TestingSessionLocal()
+    emp = db.query(Employee).filter(Employee.employee_code == "EMP-1001").first()
+    enrolled_face = emp.face_embedding
+    db.close()
+
+    punch_res = client.post("/api/v1/attendance/punch", json={
+        "employee_code": "EMP-1001",
+        "punch_type": "CHECK_IN",
+        "nonce": ch_data["nonce"],
+        "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
+        "face_embedding": enrolled_face,
+        "face_snapshot": ceiling_b64,
+        "liveness_proof": {
+            "actions_performed": ch_data["expected_actions"],
+            "motion_timestamp_ms": [100],
+            "liveness_score": 0.96
+        },
+        "latitude": 30.0444,
+        "longitude": 31.2357,
+        "gps_accuracy_meters": 6.0,
+        "is_mock_location": False,
+        "wifi_bssid": "00:14:22:01:23:45",
+        "client_timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    assert punch_res.status_code == 200
+    pdata = punch_res.json()
+    assert pdata["success"] is False
+    assert "NO_FACE_DETECTED" in pdata["rejection_reason"]

@@ -371,6 +371,78 @@
             return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
         }
 
+        // Helper: Analyze canvas to verify human face presence (rejecting ceilings, walls, lamps)
+        function verifyFaceInCanvas(canvas) {
+            try {
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                const imgData = ctx.getImageData(0, 0, width, height);
+                const data = imgData.data;
+
+                const startX = Math.floor(width * 0.15);
+                const endX = Math.floor(width * 0.85);
+                const startY = Math.floor(height * 0.15);
+                const endY = Math.floor(height * 0.85);
+
+                let skinPixels = 0;
+                let totalSamples = 0;
+                let sumLum = 0;
+                let lumArr = [];
+
+                for (let y = startY; y < endY; y += 2) {
+                    for (let x = startX; x < endX; x += 2) {
+                        const idx = (y * width + x) * 4;
+                        const r = data[idx];
+                        const g = data[idx + 1];
+                        const b = data[idx + 2];
+
+                        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                        sumLum += lum;
+                        lumArr.push(lum);
+                        totalSamples++;
+
+                        const isSkin = (
+                            r > 50 && g > 35 && b > 18 &&
+                            r > g && r > b &&
+                            (r - g) >= 10 &&
+                            (r - b) >= 12 &&
+                            (Math.max(r, g, b) - Math.min(r, g, b)) >= 12
+                        );
+
+                        if (isSkin) skinPixels++;
+                    }
+                }
+
+                const skinRatio = skinPixels / totalSamples;
+                const avgLum = sumLum / totalSamples;
+                let variance = 0;
+                for (let i = 0; i < lumArr.length; i++) {
+                    const diff = lumArr[i] - avgLum;
+                    variance += diff * diff;
+                }
+                const stdDev = Math.sqrt(variance / lumArr.length);
+
+                if (skinRatio < 0.08) {
+                    return {
+                        hasFace: false,
+                        error: "⚠️ لم يتم رصد أي وجه بشري أمام الكاميرا! تم توجيه الهاتف نحو السقف أو الجدار. يرجى توجيه الكاميرا إلى وجهك مباشرة داخل الإطار."
+                    };
+                }
+
+                if (stdDev < 15.0) {
+                    return {
+                        hasFace: false,
+                        error: "⚠️ الصورة مسطحة وفارغة ولا تحتوي على ملامح وجه واضحة (عيون، أنف، فم). تأكد من توجيه الكاميرا لوجهك مباشرة."
+                    };
+                }
+
+                return { hasFace: true, skinRatio: skinRatio };
+            } catch (e) {
+                return { hasFace: true };
+            }
+        }
+
         // Helper: Capture live camera snapshot as base64 JPEG
         function captureCameraSnapshot() {
             try {
@@ -401,6 +473,45 @@
                 localStorage.setItem('attendance_device_fp', myFp);
             }
             return myFp;
+        }
+
+        // Helper: Extract 512-d normalized face vector directly from actual live camera canvas pixels
+        function extractFaceEmbeddingFromCanvas(canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const data = imgData.data;
+
+            const embedding = new Array(512).fill(0);
+            const stepX = width / 16;
+            const stepY = height / 16;
+
+            for (let by = 0; by < 16; by++) {
+                for (let bx = 0; bx < 16; bx++) {
+                    let sumY = 0, sumCr = 0, count = 0;
+                    const startY = Math.floor(by * stepY);
+                    const endY = Math.floor((by + 1) * stepY);
+                    const startX = Math.floor(bx * stepX);
+                    const endX = Math.floor((bx + 1) * stepX);
+
+                    for (let y = startY; y < endY; y += 2) {
+                        for (let x = startX; x < endX; x += 2) {
+                            const i = (y * width + x) * 4;
+                            const r = data[i], g = data[i + 1], b = data[i + 2];
+                            sumY += (0.299 * r + 0.587 * g + 0.114 * b);
+                            sumCr += (0.5 * r - 0.4187 * g - 0.0813 * b + 128);
+                            count++;
+                        }
+                    }
+                    const idx = by * 16 + bx;
+                    embedding[idx] = count ? (sumY / count) / 255.0 : 0;
+                    embedding[256 + idx] = count ? (sumCr / count) / 255.0 : 0;
+                }
+            }
+
+            const norm = Math.sqrt(embedding.reduce((s, v) => s + v * v, 0)) || 1.0;
+            return embedding.map(v => v / norm);
         }
 
         // Helper: Generate 512-d normalized face vector
@@ -437,8 +548,19 @@
 
             try {
                 const deviceFp = getOrCreateDeviceFingerprint();
-                const faceVector = generateFaceEmbedding(code);
                 const snapshot = captureCameraSnapshot();
+                const canvas = document.getElementById('snapshot-canvas');
+                const faceCheck = verifyFaceInCanvas(canvas);
+
+                if (!faceCheck.hasFace) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>📸</span><span>التقاط بصمة الوجه وتسجيل الموظف الآن</span>';
+                    prompt.innerText = "ضع وجهك داخل الدائرة";
+                    showResult(false, "فشل تسجيل الموظف!", faceCheck.error, snapshot);
+                    return;
+                }
+
+                const faceVector = extractFaceEmbeddingFromCanvas(canvas);
 
                 const res = await fetch('/api/v1/attendance/register-and-enroll', {
                     method: 'POST',
@@ -502,7 +624,19 @@
 
             try {
                 const deviceFp = getOrCreateDeviceFingerprint();
-                const faceVector = generateFaceEmbedding(empCode);
+                const snapshot = captureCameraSnapshot();
+                const canvas = document.getElementById('snapshot-canvas');
+                const faceCheck = verifyFaceInCanvas(canvas);
+
+                if (!faceCheck.hasFace) {
+                    btnEnroll.disabled = false;
+                    btnEnroll.innerHTML = '<span>📸</span><span>تسجيل بصمة وجه الموظف المختار الآن</span>';
+                    prompt.innerText = "ضع وجهك داخل الدائرة";
+                    showResult(false, "فشل تسجيل البصمة!", faceCheck.error, snapshot);
+                    return;
+                }
+
+                const faceVector = extractFaceEmbeddingFromCanvas(canvas);
 
                 const res = await fetch('/api/v1/attendance/enroll-mobile', {
                     method: 'POST',
@@ -525,7 +659,7 @@
                         <p><strong>الموظف:</strong> ${data.employee_name}</p>
                         <p><strong>الجهاز المسجل:</strong> ${data.device_model}</p>
                         <p class="text-emerald-400 font-bold mt-2">تم حفظ متجهات وجهك الرقمية (512-d) وربط هاتفك بالنظام. يمكنك الآن البدء في تسجيل الحضور والانصراف فوراً!</p>
-                    `);
+                    `, snapshot);
                     await checkEmployeeStatus();
                 } else {
                     showResult(false, "فشل تسجيل البصمة", data.detail || "حدث خطأ أثناء التسجيل");
@@ -587,18 +721,21 @@
 
                 await new Promise(r => setTimeout(r, 1200));
 
-                // 2. Fetch Face embedding for this employee
-                const faceRes = await fetch(`/api/v1/admin/employees/${empCode}/face-vector`);
-                let faceEmbedding;
-                if (faceRes.ok) {
-                    const fData = await faceRes.json();
-                    faceEmbedding = fData.face_embedding;
-                } else {
-                    faceEmbedding = generateFaceEmbedding(empCode);
+                // 2. Capture camera snapshot & verify face presence
+                const liveSnapshot = captureCameraSnapshot();
+                const canvas = document.getElementById('snapshot-canvas');
+                const faceCheck = verifyFaceInCanvas(canvas);
+
+                if (!faceCheck.hasFace) {
+                    showResult(false, "تم رفض البصمة!", faceCheck.error, liveSnapshot);
+                    prompt.innerText = "❌ لم يتم العثور على وجه داخل الدائرة!";
+                    challengeText.innerText = "وجّه الكاميرا إلى وجهك مباشرة";
+                    challengeTimer.innerText = "تم رصد سقف أو خلفية فارغة بدون ملامح بشرية.";
+                    return;
                 }
 
-                // 3. Capture camera snapshot & Send Punch Request
-                const liveSnapshot = captureCameraSnapshot();
+                // 3. Extract biometric face embedding directly from live camera image
+                const faceEmbedding = extractFaceEmbeddingFromCanvas(canvas);
 
                 const punchRes = await fetch('/api/v1/attendance/punch', {
                     method: 'POST',

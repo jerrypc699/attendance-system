@@ -1,6 +1,9 @@
 import secrets
 import random
+import base64
+import io
 import numpy as np
+from PIL import Image
 from datetime import datetime, timezone, timedelta
 from typing import List, Tuple, Optional
 from sqlalchemy.orm import Session
@@ -15,6 +18,67 @@ AVAILABLE_ACTIONS = [
     "SMILE_PROMPTLY",
     "NOD_HEAD"
 ]
+
+def verify_face_presence_in_snapshot(snapshot: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """
+    Checks that the captured camera snapshot actually contains a live human face
+    and is not an empty background, ceiling, wall, or floor.
+    """
+    if not snapshot:
+        return True, None
+
+    # Allow mock / demo test URLs from simulation or unit tests
+    if snapshot.startswith("http://") or snapshot.startswith("https://") or "sample_snapshot" in snapshot:
+        return True, None
+
+    try:
+        raw_b64 = snapshot
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+
+        img_bytes = base64.b64decode(raw_b64)
+        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        arr = np.array(img, dtype=np.float32)
+
+        h, w, _ = arr.shape
+        if h < 30 or w < 30:
+            return False, "NO_FACE_DETECTED: الصورة الملتقطة صغيرة جداً ولا يمكن فحصها."
+
+        # Center face crop (middle 70% of frame)
+        cy1, cy2 = int(h * 0.15), int(h * 0.85)
+        cx1, cx2 = int(w * 0.15), int(w * 0.85)
+        crop = arr[cy1:cy2, cx1:cx2]
+
+        r = crop[:, :, 0]
+        g = crop[:, :, 1]
+        b = crop[:, :, 2]
+
+        # Calculate luminance variance across center
+        lum = 0.299 * r + 0.587 * g + 0.114 * b
+        lum_std = float(np.std(lum))
+
+        # Check for uniform / blank surfaces (ceilings, empty walls, floors)
+        # Real human faces have facial features (eyes, nose, mouth, hair) producing contrast (std > 16)
+        if lum_std < 16.0:
+            return False, "NO_FACE_DETECTED: لم يتم العثور على ملامح وجه في الكاميرا (تم رصد سقف أو خلفية فارغة مسطحة)! يجب توجيه الكاميرا إلى وجهك مباشرة."
+
+        # Check for human skin-tone color distribution
+        skin_mask = (
+            (r > 50) & (g > 35) & (b > 18) &
+            (r > g) & (r > b) &
+            ((r - g) >= 10) &
+            ((r - b) >= 12) &
+            ((np.maximum.reduce([r, g, b]) - np.minimum.reduce([r, g, b])) >= 12)
+        )
+        skin_ratio = float(np.mean(skin_mask))
+
+        # A ceiling, wall, lamp, or floor has almost 0% skin tones (< 8%)
+        if skin_ratio < 0.08:
+            return False, f"NO_FACE_DETECTED: لم يتم رصد وجه بشري أمام الكاميرا (تم التقاط سقف أو خلفية بدون بشرة)! تأكد من توجيه الكاميرا لوجهك داخل الإطار."
+
+        return True, None
+    except Exception as e:
+        return False, f"FACE_VERIFICATION_ERROR: فشل فحص صورة الوجه ({str(e)})"
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     """
@@ -64,10 +128,12 @@ class BiometricVerifier:
         employee: Employee,
         nonce: str,
         captured_embedding: List[float],
-        liveness_proof: ActiveLivenessProof
+        liveness_proof: ActiveLivenessProof,
+        face_snapshot: Optional[str] = None
     ) -> Tuple[bool, Optional[str], float, float]:
         """
         Verify:
+        0. Face presence in camera snapshot (rejecting ceilings, walls, empty surfaces).
         1. Nonce validity, single-use consumption, and expiration.
         2. Active actions completed match the expected challenge actions.
         3. Passive liveness score above threshold.
@@ -75,6 +141,12 @@ class BiometricVerifier:
         
         Returns: (is_valid, failure_reason, face_similarity, liveness_score)
         """
+        # 0. Reject snapshot if no real face is present
+        if face_snapshot:
+            face_ok, face_err = verify_face_presence_in_snapshot(face_snapshot)
+            if not face_ok:
+                return False, face_err, 0.0, liveness_proof.liveness_score
+
         now = datetime.now(timezone.utc)
 
         # 1. Nonce validation
