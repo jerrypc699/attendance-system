@@ -103,7 +103,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
 
       // Step 2: Get Location with mock check
       Position pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        desiredAccuracy: LocationAccuracy.high,
       );
 
       // Step 3: Get enrolled face vector
