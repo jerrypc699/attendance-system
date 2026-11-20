@@ -540,6 +540,7 @@
     <script>
         let currentEmployees = [];
         let currentBranches = [];
+        let currentDevices = [];
         let currentSettings = {};
 
         // Tab Switching
@@ -685,6 +686,7 @@
         }
 
         function renderDevices(list) {
+            currentDevices = list;
             const tbody = document.getElementById('devices-table-body');
             if (list.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">لا توجد أجهزة مسجلة</td></tr>';
@@ -978,9 +980,16 @@
 
             try {
                 // Determine Device Fingerprint
-                const deviceFp = (mode === 'WRONG_DEVICE') 
-                    ? "unregistered_attacker_device_fingerprint" 
-                    : (empCode === 'EMP-2001' ? 'sha256_hardware_fingerprint_ahmed_phone' : 'hw_fingerprint_' + empCode);
+                let deviceFp = "unregistered_attacker_device_fingerprint";
+                if (mode !== 'WRONG_DEVICE') {
+                    const empObj = currentEmployees.find(e => e.employee_code === empCode);
+                    const boundDev = currentDevices.find(d => d.id === empObj?.bound_device_id);
+                    if (boundDev && !boundDev.is_blocked) {
+                        deviceFp = boundDev.device_fingerprint;
+                    } else {
+                        deviceFp = 'e8395e48709563d5d3b8a5b7c59ff0dc69e5c57091c0cae422e8b6a589ba980e';
+                    }
+                }
 
                 // 1. Request Challenge
                 const chRes = await fetch('/api/v1/attendance/challenge', {
