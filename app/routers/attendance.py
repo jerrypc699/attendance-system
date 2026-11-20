@@ -18,16 +18,31 @@ router = APIRouter(prefix="/api/v1/attendance", tags=["Attendance Punch"])
 
 @router.get("/status/{employee_code}")
 def get_employee_enrollment_status(employee_code: str, db: Session = Depends(get_db)):
-    """Check if an employee is already enrolled or needs first-time setup"""
-    emp = db.query(Employee).filter(Employee.employee_code == employee_code).first()
+    """Check if an employee is already enrolled or needs first-time setup, supporting flexible code format"""
+    code_raw = employee_code.strip()
+    emp = db.query(Employee).filter(
+        (Employee.employee_code == code_raw) |
+        (Employee.employee_code == code_raw.upper()) |
+        (Employee.employee_code == f"EMP-{code_raw}") |
+        (Employee.employee_code == f"EMP-{code_raw.upper()}")
+    ).first()
     if not emp:
-        raise HTTPException(status_code=404, detail="Employee not found")
+        raise HTTPException(status_code=404, detail=f"رقم الأداء / الكود '{employee_code}' غير موجود بالنظام! يرجى التأكد من الرقم.")
+    
+    device_info = None
+    if emp.bound_device:
+        device_info = f"{emp.bound_device.device_model} ({emp.bound_device.os_name})"
+
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
+        "email": emp.email,
+        "phone": emp.phone or "غير مسجل",
+        "department": emp.department or "عام",
         "is_face_enrolled": emp.is_face_enrolled,
         "is_device_bound": bool(emp.bound_device_id),
-        "department": emp.department
+        "device_info": device_info,
+        "is_active": emp.is_active
     }
 
 @router.post("/enroll-mobile")

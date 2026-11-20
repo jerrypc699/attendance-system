@@ -71,82 +71,150 @@
     <!-- Main Content Area -->
     <main class="flex-1 px-4 py-3 flex flex-col items-center justify-start max-w-md mx-auto w-full space-y-4">
 
-        <!-- ================= CAMERA VIEWPORT (SHARED) ================= -->
-        <div class="relative w-60 h-60 sm:w-64 sm:h-64 rounded-full overflow-hidden bg-slate-900 border-4 border-indigo-600 shadow-2xl shadow-indigo-900/40 flex items-center justify-center shrink-0">
-            <!-- Video Stream from Real Phone Camera -->
-            <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover transform scale-x-[-1]"></video>
-            <canvas id="snapshot-canvas" class="hidden"></canvas>
-
-            <!-- Circular Scanner Overlay -->
-            <div class="absolute inset-2 camera-overlay pointer-events-none"></div>
-
-            <!-- Face Scanning Prompt -->
-            <div id="cam-prompt"
-                class="absolute bottom-3 inset-x-3 bg-slate-950/85 backdrop-blur-md py-1.5 px-2.5 rounded-full text-center border border-slate-700/60 text-[11px] font-bold text-indigo-300">
-                ضع وجهك داخل الدائرة
-            </div>
-
-            <!-- Pre-start Camera Button if permission not granted -->
-            <div id="cam-fallback" class="hidden absolute inset-0 bg-slate-900 flex flex-col items-center justify-center p-4 text-center">
-                <span class="text-4xl mb-2">📸</span>
-                <p class="text-xs text-slate-300 mb-3">اضغط للسماح بفتح الكاميرا</p>
-                <button onclick="startCamera()" class="bg-indigo-600 px-4 py-2 rounded-xl text-xs font-bold text-white shadow">
-                    تشغيل الكاميرا
-                </button>
-            </div>
-        </div>
-
         <!-- ================= VIEW 1: ATTENDANCE PUNCH VIEW ================= -->
-        <div id="view-punch" class="w-full space-y-3">
-            <!-- Employee Info Selector -->
-            <div class="w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex justify-between items-center text-xs">
-                <div class="flex-1">
-                    <p class="text-slate-400 text-[10px]">الموظف المختار:</p>
-                    <select id="emp-select" class="w-full bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs mt-0.5">
-                        <option value="EMP-2001" class="bg-slate-900">أحمد مصطفى (EMP-2001)</option>
-                    </select>
+        <div id="view-punch" class="w-full space-y-4">
+
+            <!-- STEP 1: Enter Employee ID (رقم الأداء / كود الموظف) -->
+            <div id="step-lookup" class="w-full bg-slate-900/95 border border-indigo-950/80 rounded-3xl p-5 shadow-2xl space-y-4 backdrop-blur-md">
+                <div class="text-center space-y-1">
+                    <div class="inline-flex p-3 rounded-2xl bg-indigo-950/70 border border-indigo-800/50 text-indigo-400 text-2xl shadow-inner mb-1">
+                        🆔
+                    </div>
+                    <h2 class="text-base font-black text-white">إدخال رقم الأداء (كود الموظف)</h2>
+                    <p class="text-xs text-slate-400">أدخل رقمك الوظيفي لجلب البيانات والتحقق قبل أخذ البصمة</p>
                 </div>
-                <button onclick="switchTab('register')" class="text-[10px] text-indigo-400 hover:text-indigo-300 bg-indigo-950/60 border border-indigo-800/60 px-2 py-1 rounded-lg shrink-0 mr-2 font-bold">
-                    + موظف جديد
-                </button>
+
+                <div class="space-y-3">
+                    <div class="relative">
+                        <label class="block text-[11px] font-bold text-indigo-300 mb-1.5 mr-1">رقم الأداء / الكود الوظيفي</label>
+                        <input type="text" id="emp-code-input" placeholder="مثال: EMP-2001 أو 2001"
+                            list="emp-datalist"
+                            class="w-full bg-slate-950 border-2 border-indigo-600/50 rounded-2xl px-4 py-3.5 text-center text-white font-mono font-black text-lg uppercase tracking-wider placeholder-slate-600 focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/20 shadow-inner transition"
+                            onkeydown="if(event.key==='Enter') fetchEmployeeByCode();">
+                        <datalist id="emp-datalist"></datalist>
+                    </div>
+
+                    <!-- Quick Suggestions / Last Employee -->
+                    <div id="quick-emp-container" class="hidden text-center pt-1">
+                        <button type="button" onclick="quickSelectEmployee()" class="text-[11px] text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/60 px-3 py-1.5 rounded-xl font-bold transition flex items-center justify-center gap-1.5 mx-auto">
+                            <span>⚡ الموظف السابق:</span>
+                            <span id="quick-emp-label" class="text-indigo-400 underline">--</span>
+                        </button>
+                    </div>
+
+                    <!-- Fetch Button -->
+                    <button onclick="fetchEmployeeByCode()" id="btn-fetch-code"
+                        class="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black py-3.5 rounded-2xl text-xs shadow-xl shadow-indigo-950/60 flex items-center justify-center gap-2 active:scale-95 transition">
+                        <span>🔍</span>
+                        <span>جلب البيانات وتأكيد الموظف</span>
+                    </button>
+
+                    <!-- Error Alert -->
+                    <div id="lookup-error" class="hidden p-3 rounded-2xl bg-rose-950/80 border border-rose-800/80 text-rose-300 text-xs text-center font-bold space-y-1">
+                        <p id="lookup-error-text">لم يتم العثور على الموظف</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Challenge Status Box -->
-            <div id="challenge-box" class="w-full bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-3.5 text-center transition-all">
-                <span id="challenge-badge" class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-0.5">
-                    اختبار الحيوية النشط (Liveness)
-                </span>
-                <h3 id="challenge-text" class="text-sm font-extrabold text-white">
-                    اضغط على زر البصمة لبدء الفحص
-                </h3>
-                <p id="challenge-timer" class="text-[10px] text-slate-400 mt-1">
-                    سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي
-                </p>
+            <!-- STEP 2: Employee Verified Data Card & Camera Punch Ready -->
+            <div id="step-punch-ready" class="hidden w-full space-y-4">
+                
+                <!-- Employee Profile Card -->
+                <div class="w-full bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-800/50 rounded-3xl p-4 shadow-xl space-y-3">
+                    <div class="flex items-center justify-between border-b border-indigo-900/40 pb-2.5">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-lg shadow">
+                                👤
+                            </div>
+                            <div>
+                                <h3 id="card-emp-name" class="text-sm font-black text-white leading-tight">--</h3>
+                                <p id="card-emp-dept" class="text-[11px] text-indigo-300 font-semibold">--</p>
+                            </div>
+                        </div>
+                        <button onclick="resetEmployeeLookup()" class="text-[10px] text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1.5 rounded-xl font-bold transition flex items-center gap-1">
+                            <span>🔄</span>
+                            <span>تغيير الموظف</span>
+                        </button>
+                    </div>
+
+                    <!-- Meta details: Code & Status -->
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-400 text-[10px]">رقم الأداء:</span>
+                            <span id="card-emp-code" class="text-white font-mono font-bold text-[11px]">--</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800 flex items-center justify-between">
+                            <span class="text-slate-400 text-[10px]">حالة البصمة:</span>
+                            <span id="card-face-badge" class="font-bold text-[10px]">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= CAMERA VIEWPORT ================= -->
+                <div class="flex justify-center">
+                    <div class="relative w-56 h-56 sm:w-60 sm:h-60 rounded-full overflow-hidden bg-slate-900 border-4 border-indigo-600 shadow-2xl shadow-indigo-900/40 flex items-center justify-center shrink-0">
+                        <!-- Video Stream from Real Phone Camera -->
+                        <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover transform scale-x-[-1]"></video>
+                        <canvas id="snapshot-canvas" class="hidden"></canvas>
+
+                        <!-- Circular Scanner Overlay -->
+                        <div class="absolute inset-2 camera-overlay pointer-events-none"></div>
+
+                        <!-- Face Scanning Prompt -->
+                        <div id="cam-prompt"
+                            class="absolute bottom-3 inset-x-3 bg-slate-950/85 backdrop-blur-md py-1.5 px-2.5 rounded-full text-center border border-slate-700/60 text-[11px] font-bold text-indigo-300">
+                            ضع وجهك داخل الدائرة
+                        </div>
+
+                        <!-- Pre-start Camera Button if permission not granted -->
+                        <div id="cam-fallback" class="hidden absolute inset-0 bg-slate-900 flex flex-col items-center justify-center p-4 text-center">
+                            <span class="text-4xl mb-2">📸</span>
+                            <p class="text-xs text-slate-300 mb-3">اضغط للسماح بفتح الكاميرا</p>
+                            <button onclick="startCamera()" class="bg-indigo-600 px-4 py-2 rounded-xl text-xs font-bold text-white shadow">
+                                تشغيل الكاميرا
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Challenge Status Box -->
+                <div id="challenge-box" class="w-full bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-3 text-center transition-all">
+                    <span id="challenge-badge" class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-0.5">
+                        اختبار الحيوية النشط (Liveness)
+                    </span>
+                    <h3 id="challenge-text" class="text-xs font-extrabold text-white">
+                        اضغط على زر البصمة لبدء الفحص
+                    </h3>
+                    <p id="challenge-timer" class="text-[10px] text-slate-400 mt-0.5">
+                        سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي
+                    </p>
+                </div>
+
+                <!-- Attendance Punch Buttons (When Face is Enrolled) -->
+                <div id="punch-buttons-container" class="w-full grid grid-cols-2 gap-3 pt-1">
+                    <button onclick="triggerPunch('CHECK_IN')" id="btn-checkin"
+                        class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-3.5 rounded-2xl text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-95 transition">
+                        <span>🟢</span>
+                        <span>تسجيل حضور</span>
+                    </button>
+
+                    <button onclick="triggerPunch('CHECK_OUT')" id="btn-checkout"
+                        class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition">
+                        <span>🔴</span>
+                        <span>تسجيل انصراف</span>
+                    </button>
+                </div>
+
+                <!-- Enroll Face Button (If Employee has No Face) -->
+                <div id="enroll-button-container" class="hidden w-full pt-1">
+                    <button onclick="triggerFirstTimeEnrollmentForSelected()" id="btn-enroll"
+                        class="w-full bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-black py-3.5 rounded-2xl text-xs shadow-xl shadow-indigo-950 flex items-center justify-center gap-2 active:scale-95 transition animate-pulse">
+                        <span>📸</span>
+                        <span>التقاط بصمة وجه الموظف لأول مرة الآن</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Attendance Punch Buttons (When Enrolled) -->
-            <div id="punch-buttons-container" class="w-full grid grid-cols-2 gap-3 pt-1">
-                <button onclick="triggerPunch('CHECK_IN')" id="btn-checkin"
-                    class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-3.5 rounded-2xl text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-95 transition">
-                    <span>🟢</span>
-                    <span>تسجيل حضور</span>
-                </button>
-
-                <button onclick="triggerPunch('CHECK_OUT')" id="btn-checkout"
-                    class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition">
-                    <span>🔴</span>
-                    <span>تسجيل انصراف</span>
-                </button>
-            </div>
-
-            <!-- Enroll Face Button (If Selected Employee has No Face) -->
-            <div id="enroll-button-container" class="hidden w-full pt-1">
-                <button onclick="triggerFirstTimeEnrollmentForSelected()" id="btn-enroll"
-                    class="w-full bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-black py-3.5 rounded-2xl text-xs shadow-xl shadow-indigo-950 flex items-center justify-center gap-2 active:scale-95 transition animate-pulse">
-                    <span>📸</span>
-                    <span>تسجيل بصمة وجه الموظف المختار الآن</span>
-                </button>
-            </div>
         </div>
 
         <!-- ================= VIEW 2: REGISTER NEW EMPLOYEE & ENROLL ================= -->
@@ -221,6 +289,7 @@
         let currentPos = { latitude: 30.04441, longitude: 31.23571, accuracy: 8.0, isMock: false };
         let videoStream = null;
         let activeTab = 'punch'; // 'punch' | 'register'
+        let currentEmployee = null;
 
         // Tab Switcher
         function switchTab(tab) {
@@ -236,14 +305,16 @@
                 btnRegister.className = "py-2.5 rounded-xl transition duration-200 text-slate-400 hover:text-white flex items-center justify-center gap-1.5";
                 viewPunch.classList.remove('hidden');
                 viewRegister.classList.add('hidden');
-                prompt.innerText = "ضع وجهك داخل الدائرة";
-                checkEmployeeStatus();
+                if (currentEmployee) {
+                    prompt.innerText = "ضع وجهك داخل الدائرة";
+                }
             } else {
                 btnRegister.className = "py-2.5 rounded-xl transition duration-200 bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1.5";
                 btnPunch.className = "py-2.5 rounded-xl transition duration-200 text-slate-400 hover:text-white flex items-center justify-center gap-1.5";
                 viewRegister.classList.remove('hidden');
                 viewPunch.classList.add('hidden');
                 prompt.innerText = "وجّه وجهك أمام الكاميرا لتسجيل البصمة";
+                startCamera();
             }
         }
 
@@ -251,16 +322,17 @@
         async function startCamera() {
             const video = document.getElementById('webcam');
             const fallback = document.getElementById('cam-fallback');
+            if (videoStream && video && video.srcObject) return; // already active
             try {
                 videoStream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
                     audio: false
                 });
-                video.srcObject = videoStream;
-                fallback.classList.add('hidden');
+                if (video) video.srcObject = videoStream;
+                if (fallback) fallback.classList.add('hidden');
             } catch (err) {
                 console.warn("Camera access failed or blocked:", err);
-                fallback.classList.remove('hidden');
+                if (fallback) fallback.classList.remove('hidden');
             }
         }
 
@@ -288,71 +360,137 @@
             );
         }
 
-        // 3. Load Employees into dropdown
-        async function loadEmployees(selectedCode = null) {
-            try {
-                const res = await fetch('/api/v1/admin/employees');
-                const list = await res.json();
-                if (list.length > 0) {
-                    const sel = document.getElementById('emp-select');
-                    sel.innerHTML = list.map(e => `
-                        <option value="${e.employee_code}" class="bg-slate-900">${e.full_name} (${e.employee_code})</option>
-                    `).join('');
+        // 3. Employee Lookup & Verification Flow
+        async function fetchEmployeeByCode(customCode = null) {
+            const input = document.getElementById('emp-code-input');
+            const code = (customCode || (input ? input.value : "")).trim();
+            const btn = document.getElementById('btn-fetch-code');
+            const errorBox = document.getElementById('lookup-error');
+            const errorText = document.getElementById('lookup-error-text');
 
-                    if (selectedCode) {
-                        sel.value = selectedCode;
-                    } else {
-                        const savedCode = localStorage.getItem('last_employee_code');
-                        if (savedCode && list.some(e => e.employee_code === savedCode)) {
-                            sel.value = savedCode;
-                        }
-                    }
-                }
-                await checkEmployeeStatus();
-            } catch (_) { }
-        }
+            if (!code) {
+                errorBox.classList.remove('hidden');
+                errorText.innerText = "يرجى كتابة رقم الأداء / كود الموظف أولاً!";
+                return;
+            }
 
-        // 4. Check status of selected employee
-        async function checkEmployeeStatus() {
-            const empCode = document.getElementById('emp-select').value;
-            if (!empCode) return;
+            errorBox.classList.add('hidden');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span><span>جارٍ جلب البيانات والتحقق...</span>';
 
             try {
-                const res = await fetch(`/api/v1/attendance/status/${empCode}`);
+                const res = await fetch(`/api/v1/attendance/status/${encodeURIComponent(code)}`);
+                const data = await res.json();
+
                 if (res.ok) {
-                    const data = await res.json();
-                    const badge = document.getElementById('challenge-badge');
-                    const text = document.getElementById('challenge-text');
-                    const timer = document.getElementById('challenge-timer');
-                    const punchContainer = document.getElementById('punch-buttons-container');
-                    const enrollContainer = document.getElementById('enroll-button-container');
-
-                    if (!data.is_face_enrolled) {
-                        badge.innerText = "⚠️ لم تسجل بصمتك بعد";
-                        badge.className = "text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-0.5";
-                        text.innerText = "هذا الموظف بحاجة لأخذ بصمة الوجه أولاً";
-                        timer.innerText = "وجّه الكاميرا نحوك واضغط على الزر أدناه لحفظ ملامحك وربط هاتفك لأول مرة.";
-                        punchContainer.classList.add('hidden');
-                        enrollContainer.classList.remove('hidden');
-                    } else {
-                        badge.innerText = "اختبار الحيوية النشط (Liveness)";
-                        badge.className = "text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-0.5";
-                        text.innerText = "اضغط على زر البصمة لبدء الفحص";
-                        timer.innerText = "سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي";
-                        punchContainer.classList.remove('hidden');
-                        enrollContainer.classList.add('hidden');
-                    }
+                    applyVerifiedEmployee(data);
+                } else {
+                    errorBox.classList.remove('hidden');
+                    errorText.innerText = data.detail || `رقم الأداء '${code}' غير موجود بالنظام! يرجى التأكد من الرقم.`;
                 }
-            } catch (e) {
-                console.warn(e);
+            } catch (err) {
+                errorBox.classList.remove('hidden');
+                errorText.innerText = "تعذر الاتصال بالخادم. يرجى التحقق من اتصال الشبكة.";
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🔍</span><span>جلب البيانات وتأكيد الموظف</span>';
             }
         }
 
-        document.getElementById('emp-select').addEventListener('change', () => {
-            const val = document.getElementById('emp-select').value;
-            localStorage.setItem('last_employee_code', val);
-            checkEmployeeStatus();
-        });
+        function applyVerifiedEmployee(data) {
+            currentEmployee = data;
+
+            // Fill card details
+            document.getElementById('card-emp-name').innerText = data.full_name;
+            document.getElementById('card-emp-dept').innerText = data.department ? `قسم: ${data.department}` : "القسم: عام";
+            document.getElementById('card-emp-code').innerText = data.employee_code;
+
+            const badge = document.getElementById('card-face-badge');
+            const punchContainer = document.getElementById('punch-buttons-container');
+            const enrollContainer = document.getElementById('enroll-button-container');
+            const chBadge = document.getElementById('challenge-badge');
+            const chText = document.getElementById('challenge-text');
+            const chTimer = document.getElementById('challenge-timer');
+
+            if (data.is_face_enrolled) {
+                badge.innerHTML = '<span class="text-emerald-400">🟢 مسجلة وجاهزة</span>';
+                punchContainer.classList.remove('hidden');
+                enrollContainer.classList.add('hidden');
+                chBadge.innerText = "اختبار الحيوية النشط (Liveness)";
+                chBadge.className = "text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-0.5";
+                chText.innerText = "اضغط على زر الحضور أو الانصراف لبدء البصمة";
+                chTimer.innerText = "سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي";
+            } else {
+                badge.innerHTML = '<span class="text-amber-400">⚠️ بحاجة لتسجيل أول مرة</span>';
+                punchContainer.classList.add('hidden');
+                enrollContainer.classList.remove('hidden');
+                chBadge.innerText = "⚠️ لم تسجل بصمتك بعد";
+                chBadge.className = "text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-0.5";
+                chText.innerText = "هذا الموظف بحاجة لالتقاط بصمة الوجه أولاً";
+                chTimer.innerText = "وجّه الكاميرا نحوك واضغط على الزر أدناه لحفظ ملامحك وربط هاتفك لأول مرة.";
+            }
+
+            // Save to localStorage for quick next-time entry
+            localStorage.setItem('last_employee_code', data.employee_code);
+            localStorage.setItem('last_employee_name', data.full_name);
+
+            // Hide step 1, show step 2
+            document.getElementById('step-lookup').classList.add('hidden');
+            document.getElementById('step-punch-ready').classList.remove('hidden');
+
+            // Start camera
+            startCamera();
+        }
+
+        function resetEmployeeLookup() {
+            currentEmployee = null;
+            document.getElementById('step-punch-ready').classList.add('hidden');
+            document.getElementById('step-lookup').classList.remove('hidden');
+            document.getElementById('lookup-error').classList.add('hidden');
+            const input = document.getElementById('emp-code-input');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }
+
+        function quickSelectEmployee() {
+            const savedCode = localStorage.getItem('last_employee_code');
+            if (savedCode) {
+                fetchEmployeeByCode(savedCode);
+            }
+        }
+
+        // Initialize Employee Datalist and quick access
+        async function initEmployeeLookup() {
+            const savedCode = localStorage.getItem('last_employee_code');
+            const savedName = localStorage.getItem('last_employee_name');
+            const input = document.getElementById('emp-code-input');
+
+            if (savedCode) {
+                if (input) input.value = savedCode;
+                const quickBox = document.getElementById('quick-emp-container');
+                const quickLabel = document.getElementById('quick-emp-label');
+                if (quickBox && quickLabel) {
+                    quickBox.classList.remove('hidden');
+                    quickLabel.innerText = `${savedName || ''} (${savedCode})`;
+                }
+            }
+
+            // Populate datalist from server
+            try {
+                const res = await fetch('/api/v1/admin/employees');
+                if (res.ok) {
+                    const list = await res.json();
+                    const datalist = document.getElementById('emp-datalist');
+                    if (datalist) {
+                        datalist.innerHTML = list.map(e => `
+                            <option value="${e.employee_code}">${e.full_name} - ${e.department || ''}</option>
+                        `).join('');
+                    }
+                }
+            } catch (_) {}
+        }
 
         // Helper: Convert UTC timestamp correctly to Local Device Time (e.g. Cairo Time UTC+2)
         function formatLocalTime(ts) {
@@ -584,6 +722,7 @@
 
                 if (res.ok && data.success) {
                     localStorage.setItem('last_employee_code', code);
+                    localStorage.setItem('last_employee_name', data.full_name);
                     showResult(true, "🎉 مبروك! تم تسجيل الموظف وبصمة وجهه!", `
                         <p><strong>الموظف:</strong> ${data.full_name}</p>
                         <p><strong>كود الموظف:</strong> ${data.employee_code}</p>
@@ -597,8 +736,14 @@
                     document.getElementById('reg-dept').value = '';
                     document.getElementById('reg-contact').value = '';
 
-                    // Reload dropdown and switch back to punch tab
-                    await loadEmployees(code);
+                    // Apply as verified employee and switch back to punch tab
+                    applyVerifiedEmployee({
+                        employee_code: data.employee_code,
+                        full_name: data.full_name,
+                        department: data.department,
+                        is_face_enrolled: true,
+                        is_device_bound: true
+                    });
                     switchTab('punch');
                 } else {
                     showResult(false, "فشل تسجيل الموظف", data.detail || "حدث خطأ أثناء التسجيل");
@@ -614,7 +759,7 @@
 
         // ================= ACTION: ENROLL FACE FOR SELECTED EMPLOYEE =================
         async function triggerFirstTimeEnrollmentForSelected() {
-            const empCode = document.getElementById('emp-select').value;
+            const empCode = currentEmployee ? currentEmployee.employee_code : document.getElementById('emp-code-input').value.trim();
             const prompt = document.getElementById('cam-prompt');
             const btnEnroll = document.getElementById('btn-enroll');
 
@@ -630,7 +775,7 @@
 
                 if (!faceCheck.hasFace) {
                     btnEnroll.disabled = false;
-                    btnEnroll.innerHTML = '<span>📸</span><span>تسجيل بصمة وجه الموظف المختار الآن</span>';
+                    btnEnroll.innerHTML = '<span>📸</span><span>التقاط بصمة وجه الموظف لأول مرة الآن</span>';
                     prompt.innerText = "ضع وجهك داخل الدائرة";
                     showResult(false, "فشل تسجيل البصمة!", faceCheck.error, snapshot);
                     return;
@@ -660,7 +805,11 @@
                         <p><strong>الجهاز المسجل:</strong> ${data.device_model}</p>
                         <p class="text-emerald-400 font-bold mt-2">تم حفظ متجهات وجهك الرقمية (512-d) وربط هاتفك بالنظام. يمكنك الآن البدء في تسجيل الحضور والانصراف فوراً!</p>
                     `, snapshot);
-                    await checkEmployeeStatus();
+                    
+                    if (currentEmployee) {
+                        currentEmployee.is_face_enrolled = true;
+                        applyVerifiedEmployee(currentEmployee);
+                    }
                 } else {
                     showResult(false, "فشل تسجيل البصمة", data.detail || "حدث خطأ أثناء التسجيل");
                 }
@@ -668,14 +817,14 @@
                 showResult(false, "خطأ في الاتصال", err.message);
             } finally {
                 btnEnroll.disabled = false;
-                btnEnroll.innerHTML = '<span>📸</span><span>تسجيل بصمة وجه الموظف المختار الآن</span>';
+                btnEnroll.innerHTML = '<span>📸</span><span>التقاط بصمة وجه الموظف لأول مرة الآن</span>';
                 prompt.innerText = "ضع وجهك داخل الدائرة";
             }
         }
 
         // ================= ACTION: TRIGGER ATTENDANCE PUNCH =================
         async function triggerPunch(type) {
-            const empCode = document.getElementById('emp-select').value;
+            const empCode = currentEmployee ? currentEmployee.employee_code : document.getElementById('emp-code-input').value.trim();
             const prompt = document.getElementById('cam-prompt');
             const challengeText = document.getElementById('challenge-text');
             const challengeTimer = document.getElementById('challenge-timer');
@@ -779,7 +928,7 @@
                 }
 
                 prompt.innerText = "ضع وجهك داخل الدائرة";
-                challengeText.innerText = "اضغط على زر البصمة لبدء الفحص";
+                challengeText.innerText = "اضغط على زر الحضور أو الانصراف لبدء البصمة";
                 challengeTimer.innerText = "سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي";
 
             } catch (err) {
@@ -826,9 +975,8 @@
         }
 
         // Initialize on load
-        startCamera();
         initGPS();
-        loadEmployees();
+        initEmployeeLookup();
     </script>
 </body>
 
