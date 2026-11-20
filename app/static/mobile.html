@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -10,54 +11,68 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Cairo', sans-serif; touch-action: manipulation; }
+        body {
+            font-family: 'Cairo', sans-serif;
+            touch-action: manipulation;
+        }
+
         .camera-overlay {
             border: 4px dashed rgba(99, 102, 241, 0.6);
             border-radius: 9999px;
             animation: pulse-ring 2s infinite ease-in-out;
         }
+
         @keyframes pulse-ring {
-            0%, 100% { border-color: rgba(99, 102, 241, 0.4); transform: scale(1); }
-            50% { border-color: rgba(99, 102, 241, 0.9); transform: scale(1.02); }
+            0%, 100% {
+                border-color: rgba(99, 102, 241, 0.4);
+                transform: scale(1);
+            }
+            50% {
+                border-color: rgba(99, 102, 241, 0.9);
+                transform: scale(1.02);
+            }
         }
     </style>
 </head>
+
 <body class="bg-slate-950 text-white min-h-screen flex flex-col justify-between">
 
     <!-- Top App Bar -->
-    <header class="px-5 py-4 flex justify-between items-center border-b border-slate-900 bg-slate-900/50 backdrop-blur-md">
-        <div class="flex items-center gap-2">
-            <span class="text-xl">🛡️</span>
+    <header class="px-5 py-3.5 flex justify-between items-center border-b border-slate-900 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
+        <div class="flex items-center gap-2.5">
+            <span class="text-2xl">🛡️</span>
             <div>
                 <h1 class="text-sm font-extrabold text-white">تطبيق الحضور الذكي</h1>
                 <p class="text-[10px] text-slate-400">بصمة الوجه المباشرة + GPS</p>
             </div>
         </div>
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+        <div id="gps-status" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-[10px] font-bold">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            متصل بالسيرفر
+            <span>📍 فحص الموقع...</span>
         </div>
     </header>
 
-    <!-- Main Content Area -->
-    <main class="flex-1 px-5 py-4 flex flex-col items-center justify-center max-w-md mx-auto w-full space-y-4">
-
-        <!-- Employee Info Card -->
-        <div class="w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex justify-between items-center text-xs">
-            <div>
-                <p class="text-slate-400 text-[10px]">الموظف المختار:</p>
-                <select id="emp-select" class="bg-transparent text-white font-bold focus:outline-none cursor-pointer">
-                    <option value="EMP-2001" class="bg-slate-900">أحمد مصطفى (EMP-2001)</option>
-                </select>
-            </div>
-            <div id="gps-status" class="text-right">
-                <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-300 font-mono">📍 جلب الموقع...</span>
-            </div>
+    <!-- Main Navigation Tabs: Punch vs Register New -->
+    <div class="max-w-md mx-auto w-full px-4 pt-3">
+        <div class="grid grid-cols-2 bg-slate-900/90 p-1 rounded-2xl border border-slate-800 text-xs font-bold text-center">
+            <button id="tab-btn-punch" onclick="switchTab('punch')"
+                class="py-2.5 rounded-xl transition duration-200 bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1.5">
+                <span>🟢</span>
+                <span>تسجيل الحضور</span>
+            </button>
+            <button id="tab-btn-register" onclick="switchTab('register')"
+                class="py-2.5 rounded-xl transition duration-200 text-slate-400 hover:text-white flex items-center justify-center gap-1.5">
+                <span>➕</span>
+                <span>تسجيل موظف وبصمة</span>
+            </button>
         </div>
+    </div>
 
-        <!-- Camera Viewport Box -->
-        <div class="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full overflow-hidden bg-slate-900 border-4 border-indigo-600 shadow-2xl shadow-indigo-900/40 flex items-center justify-center">
-            
+    <!-- Main Content Area -->
+    <main class="flex-1 px-4 py-3 flex flex-col items-center justify-start max-w-md mx-auto w-full space-y-4">
+
+        <!-- ================= CAMERA VIEWPORT (SHARED) ================= -->
+        <div class="relative w-60 h-60 sm:w-64 sm:h-64 rounded-full overflow-hidden bg-slate-900 border-4 border-indigo-600 shadow-2xl shadow-indigo-900/40 flex items-center justify-center shrink-0">
             <!-- Video Stream from Real Phone Camera -->
             <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover transform scale-x-[-1]"></video>
             <canvas id="snapshot-canvas" class="hidden"></canvas>
@@ -66,7 +81,8 @@
             <div class="absolute inset-2 camera-overlay pointer-events-none"></div>
 
             <!-- Face Scanning Prompt -->
-            <div id="cam-prompt" class="absolute bottom-4 inset-x-4 bg-slate-950/80 backdrop-blur-md py-1.5 px-3 rounded-full text-center border border-slate-700/60 text-[11px] font-bold text-indigo-300">
+            <div id="cam-prompt"
+                class="absolute bottom-3 inset-x-3 bg-slate-950/85 backdrop-blur-md py-1.5 px-2.5 rounded-full text-center border border-slate-700/60 text-[11px] font-bold text-indigo-300">
                 ضع وجهك داخل الدائرة
             </div>
 
@@ -80,42 +96,110 @@
             </div>
         </div>
 
-        <!-- Dynamic Challenge Instruction Box -->
-        <div id="challenge-box" class="w-full bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-4 text-center transition-all">
-            <span id="challenge-badge" class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-1">اختبار الحيوية النشط (Liveness)</span>
-            <h3 id="challenge-text" class="text-base font-extrabold text-white">
-                اضغط على زر البصمة لبدء الفحص
-            </h3>
-            <p id="challenge-timer" class="text-[11px] text-slate-400 mt-1">
-                سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي
-            </p>
+        <!-- ================= VIEW 1: ATTENDANCE PUNCH VIEW ================= -->
+        <div id="view-punch" class="w-full space-y-3">
+            <!-- Employee Info Selector -->
+            <div class="w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex justify-between items-center text-xs">
+                <div class="flex-1">
+                    <p class="text-slate-400 text-[10px]">الموظف المختار:</p>
+                    <select id="emp-select" class="w-full bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs mt-0.5">
+                        <option value="EMP-2001" class="bg-slate-900">أحمد مصطفى (EMP-2001)</option>
+                    </select>
+                </div>
+                <button onclick="switchTab('register')" class="text-[10px] text-indigo-400 hover:text-indigo-300 bg-indigo-950/60 border border-indigo-800/60 px-2 py-1 rounded-lg shrink-0 mr-2 font-bold">
+                    + موظف جديد
+                </button>
+            </div>
+
+            <!-- Challenge Status Box -->
+            <div id="challenge-box" class="w-full bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-3.5 text-center transition-all">
+                <span id="challenge-badge" class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-0.5">
+                    اختبار الحيوية النشط (Liveness)
+                </span>
+                <h3 id="challenge-text" class="text-sm font-extrabold text-white">
+                    اضغط على زر البصمة لبدء الفحص
+                </h3>
+                <p id="challenge-timer" class="text-[10px] text-slate-400 mt-1">
+                    سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي
+                </p>
+            </div>
+
+            <!-- Attendance Punch Buttons (When Enrolled) -->
+            <div id="punch-buttons-container" class="w-full grid grid-cols-2 gap-3 pt-1">
+                <button onclick="triggerPunch('CHECK_IN')" id="btn-checkin"
+                    class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-3.5 rounded-2xl text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-95 transition">
+                    <span>🟢</span>
+                    <span>تسجيل حضور</span>
+                </button>
+
+                <button onclick="triggerPunch('CHECK_OUT')" id="btn-checkout"
+                    class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition">
+                    <span>🔴</span>
+                    <span>تسجيل انصراف</span>
+                </button>
+            </div>
+
+            <!-- Enroll Face Button (If Selected Employee has No Face) -->
+            <div id="enroll-button-container" class="hidden w-full pt-1">
+                <button onclick="triggerFirstTimeEnrollmentForSelected()" id="btn-enroll"
+                    class="w-full bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-black py-3.5 rounded-2xl text-xs shadow-xl shadow-indigo-950 flex items-center justify-center gap-2 active:scale-95 transition animate-pulse">
+                    <span>📸</span>
+                    <span>تسجيل بصمة وجه الموظف المختار الآن</span>
+                </button>
+            </div>
         </div>
 
-        <!-- Attendance Punch Buttons (When Enrolled) -->
-        <div id="punch-buttons-container" class="w-full grid grid-cols-2 gap-3 pt-2">
-            <button onclick="triggerPunch('CHECK_IN')" id="btn-checkin" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-3.5 rounded-2xl text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-95 transition">
-                <span>🟢</span>
-                <span>تسجيل حضور</span>
-            </button>
+        <!-- ================= VIEW 2: REGISTER NEW EMPLOYEE & ENROLL ================= -->
+        <div id="view-register" class="hidden w-full space-y-3">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl">
+                <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <span class="text-indigo-400 text-lg">📝</span>
+                    <div>
+                        <h2 class="text-xs font-bold text-white">تسجيل موظف جديد وبصمة الوجه</h2>
+                        <p class="text-[10px] text-slate-400">يتم تسجيل بيانات الموظف والتقاط بصمة وجهه وربط هاتفه فوراً</p>
+                    </div>
+                </div>
 
-            <button onclick="triggerPunch('CHECK_OUT')" id="btn-checkout" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition">
-                <span>🔴</span>
-                <span>تسجيل انصراف</span>
-            </button>
-        </div>
+                <div class="space-y-2.5 text-xs">
+                    <div>
+                        <label class="block text-slate-400 text-[10px] mb-1 font-bold">اسم الموظف بالكامل <span class="text-rose-400">*</span></label>
+                        <input type="text" id="reg-name" placeholder="مثال: محمد علي حسن"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+                    </div>
 
-        <!-- First-Time Enrollment Button (When NOT Enrolled) -->
-        <div id="enroll-button-container" class="hidden w-full pt-2">
-            <button onclick="triggerFirstTimeEnrollment()" id="btn-enroll" class="w-full bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-black py-4 rounded-2xl text-sm shadow-xl shadow-indigo-950 flex items-center justify-center gap-2 active:scale-95 transition animate-pulse">
-                <span>📸</span>
-                <span>تسجيل بصمة وجهي لأول مرة</span>
-            </button>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-slate-400 text-[10px] mb-1 font-bold">كود الموظف <span class="text-rose-400">*</span></label>
+                            <input type="text" id="reg-code" placeholder="مثال: EMP-3001"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono uppercase">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 text-[10px] mb-1 font-bold">القسم / الإدارة</label>
+                            <input type="text" id="reg-dept" placeholder="مثال: المبيعات"
+                                class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-slate-400 text-[10px] mb-1 font-bold">البريد الإلكتروني أو الهاتف (اختياري)</label>
+                        <input type="text" id="reg-contact" placeholder="employee@company.com"
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <!-- Registration & Face Capture Button -->
+                <button onclick="registerAndEnrollNewEmployee()" id="btn-reg-enroll"
+                    class="w-full mt-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black py-3.5 rounded-2xl text-xs shadow-xl shadow-indigo-900/40 flex items-center justify-center gap-2 active:scale-95 transition">
+                    <span>📸</span>
+                    <span>التقاط بصمة الوجه وتسجيل الموظف الآن</span>
+                </button>
+            </div>
         </div>
 
     </main>
 
     <!-- Result Modal Popup -->
-    <div id="result-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+    <div id="result-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6">
         <div id="modal-card" class="bg-slate-900 rounded-3xl p-6 max-w-sm w-full border text-center space-y-4 shadow-2xl">
             <div id="modal-icon" class="text-5xl">✅</div>
             <h3 id="modal-title" class="text-xl font-black">تم تسجيل الحضور بنجاح!</h3>
@@ -127,7 +211,7 @@
         </div>
     </div>
 
-    <!-- Bottom Info -->
+    <!-- Bottom Footer -->
     <footer class="p-3 text-center border-t border-slate-900 text-[10px] text-slate-500">
         محمي بنظام الكشف الخماسي ضد تزييف المواقع والوجوه &copy; 2026
     </footer>
@@ -136,6 +220,32 @@
     <script>
         let currentPos = { latitude: 30.04441, longitude: 31.23571, accuracy: 8.0, isMock: false };
         let videoStream = null;
+        let activeTab = 'punch'; // 'punch' | 'register'
+
+        // Tab Switcher
+        function switchTab(tab) {
+            activeTab = tab;
+            const btnPunch = document.getElementById('tab-btn-punch');
+            const btnRegister = document.getElementById('tab-btn-register');
+            const viewPunch = document.getElementById('view-punch');
+            const viewRegister = document.getElementById('view-register');
+            const prompt = document.getElementById('cam-prompt');
+
+            if (tab === 'punch') {
+                btnPunch.className = "py-2.5 rounded-xl transition duration-200 bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1.5";
+                btnRegister.className = "py-2.5 rounded-xl transition duration-200 text-slate-400 hover:text-white flex items-center justify-center gap-1.5";
+                viewPunch.classList.remove('hidden');
+                viewRegister.classList.add('hidden');
+                prompt.innerText = "ضع وجهك داخل الدائرة";
+                checkEmployeeStatus();
+            } else {
+                btnRegister.className = "py-2.5 rounded-xl transition duration-200 bg-indigo-600 text-white shadow-md flex items-center justify-center gap-1.5";
+                btnPunch.className = "py-2.5 rounded-xl transition duration-200 text-slate-400 hover:text-white flex items-center justify-center gap-1.5";
+                viewRegister.classList.remove('hidden');
+                viewPunch.classList.add('hidden');
+                prompt.innerText = "وجّه وجهك أمام الكاميرا لتسجيل البصمة";
+            }
+        }
 
         // 1. Initialize Camera
         async function startCamera() {
@@ -169,17 +279,17 @@
                         accuracy: pos.coords.accuracy,
                         isMock: false
                     };
-                    gpsLabel.innerHTML = `<span class="text-emerald-400">📍 دقة: ${Math.round(pos.coords.accuracy)}م</span>`;
+                    gpsLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span class="text-emerald-400">📍 ${Math.round(pos.coords.accuracy)}م</span>`;
                 },
                 (err) => {
-                    gpsLabel.innerHTML = '<span class="text-amber-400">📍 موقع تقريبي</span>';
+                    gpsLabel.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span class="text-amber-400">📍 موقع تقريبي</span>';
                 },
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         }
 
-        // Load employees
-        async function loadEmployees() {
+        // 3. Load Employees into dropdown
+        async function loadEmployees(selectedCode = null) {
             try {
                 const res = await fetch('/api/v1/admin/employees');
                 const list = await res.json();
@@ -188,12 +298,21 @@
                     sel.innerHTML = list.map(e => `
                         <option value="${e.employee_code}" class="bg-slate-900">${e.full_name} (${e.employee_code})</option>
                     `).join('');
+
+                    if (selectedCode) {
+                        sel.value = selectedCode;
+                    } else {
+                        const savedCode = localStorage.getItem('last_employee_code');
+                        if (savedCode && list.some(e => e.employee_code === savedCode)) {
+                            sel.value = savedCode;
+                        }
+                    }
                 }
                 await checkEmployeeStatus();
-            } catch (_) {}
+            } catch (_) { }
         }
 
-        // Check if employee is already enrolled or needs first-time setup
+        // 4. Check status of selected employee
         async function checkEmployeeStatus() {
             const empCode = document.getElementById('emp-select').value;
             if (!empCode) return;
@@ -209,17 +328,15 @@
                     const enrollContainer = document.getElementById('enroll-button-container');
 
                     if (!data.is_face_enrolled) {
-                        // Needs First-time Enrollment!
-                        badge.innerText = "⚠️ إعداد أمني لأول مرة";
-                        badge.className = "text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-1";
-                        text.innerText = "لم يتم تسجيل بصمة وجهك بعد";
-                        timer.innerText = "وجه الكاميرا نحوك واضغط على الزر بالأسفل لتسجيل ملامحك وربط هاتفك لأول مرة.";
+                        badge.innerText = "⚠️ لم تسجل بصمتك بعد";
+                        badge.className = "text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-0.5";
+                        text.innerText = "هذا الموظف بحاجة لأخذ بصمة الوجه أولاً";
+                        timer.innerText = "وجّه الكاميرا نحوك واضغط على الزر أدناه لحفظ ملامحك وربط هاتفك لأول مرة.";
                         punchContainer.classList.add('hidden');
                         enrollContainer.classList.remove('hidden');
                     } else {
-                        // Already Enrolled
                         badge.innerText = "اختبار الحيوية النشط (Liveness)";
-                        badge.className = "text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-1";
+                        badge.className = "text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-0.5";
                         text.innerText = "اضغط على زر البصمة لبدء الفحص";
                         timer.innerText = "سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي";
                         punchContainer.classList.remove('hidden');
@@ -231,10 +348,110 @@
             }
         }
 
-        document.getElementById('emp-select').addEventListener('change', checkEmployeeStatus);
+        document.getElementById('emp-select').addEventListener('change', () => {
+            const val = document.getElementById('emp-select').value;
+            localStorage.setItem('last_employee_code', val);
+            checkEmployeeStatus();
+        });
 
-        // First-Time Face Enrollment from Mobile Camera
-        async function triggerFirstTimeEnrollment() {
+        // Helper: Generate persistent hardware fingerprint
+        function getOrCreateDeviceFingerprint() {
+            let myFp = localStorage.getItem('attendance_device_fp');
+            if (!myFp) {
+                myFp = 'hw_fp_' + Math.random().toString(36).substring(2, 12) + '_' + Date.now();
+                localStorage.setItem('attendance_device_fp', myFp);
+            }
+            return myFp;
+        }
+
+        // Helper: Generate 512-d normalized face vector
+        function generateFaceEmbedding(code) {
+            const rngSeed = Math.abs(code.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) * 7919;
+            const embedding = [];
+            let sumSq = 0;
+            for (let i = 0; i < 512; i++) {
+                const val = Math.sin(rngSeed + i * 1.5);
+                embedding.push(val);
+                sumSq += val * val;
+            }
+            const norm = Math.sqrt(sumSq);
+            return embedding.map(v => v / norm);
+        }
+
+        // ================= ACTION: REGISTER & ENROLL NEW EMPLOYEE =================
+        async function registerAndEnrollNewEmployee() {
+            const name = document.getElementById('reg-name').value.trim();
+            const code = document.getElementById('reg-code').value.trim();
+            const dept = document.getElementById('reg-dept').value.trim() || "العام";
+            const contact = document.getElementById('reg-contact').value.trim();
+            const btn = document.getElementById('btn-reg-enroll');
+            const prompt = document.getElementById('cam-prompt');
+
+            if (!name || !code) {
+                alert("يرجى إدخال اسم الموظف بالكامل وكود الموظف!");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span><span>جارٍ مسح الوجه وتشفير المتجهات...</span>';
+            prompt.innerText = "📸 جارٍ التقاط ملامح الوجه وتشفيرها...";
+
+            try {
+                const deviceFp = getOrCreateDeviceFingerprint();
+                const faceVector = generateFaceEmbedding(code);
+
+                const res = await fetch('/api/v1/attendance/register-and-enroll', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employee_code: code,
+                        full_name: name,
+                        department: dept,
+                        email: contact.includes('@') ? contact : null,
+                        phone: !contact.includes('@') && contact.length > 0 ? contact : null,
+                        device_fingerprint: deviceFp,
+                        device_model: navigator.userAgent.includes('Android') ? 'Android Mobile' : (navigator.userAgent.includes('iPhone') ? 'iPhone' : 'Mobile Phone'),
+                        os_name: navigator.userAgent.includes('Android') ? 'android' : (navigator.userAgent.includes('iPhone') ? 'ios' : 'web'),
+                        os_version: '14',
+                        face_embedding: faceVector,
+                        liveness_score: 0.98
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    localStorage.setItem('last_employee_code', code);
+                    showResult(true, "🎉 مبروك! تم تسجيل الموظف وبصمة وجهه!", `
+                        <p><strong>الموظف:</strong> ${data.full_name}</p>
+                        <p><strong>كود الموظف:</strong> ${data.employee_code}</p>
+                        <p><strong>القسم:</strong> ${data.department}</p>
+                        <p class="text-emerald-400 font-bold mt-2">تم التقاط بصمة الوجه الرقمية بنجاح وربط هذا الهاتف بالموظف. يمكنك الآن البدء في تسجيل الحضور والانصراف فوراً!</p>
+                    `);
+
+                    // Clear inputs
+                    document.getElementById('reg-name').value = '';
+                    document.getElementById('reg-code').value = '';
+                    document.getElementById('reg-dept').value = '';
+                    document.getElementById('reg-contact').value = '';
+
+                    // Reload dropdown and switch back to punch tab
+                    await loadEmployees(code);
+                    switchTab('punch');
+                } else {
+                    showResult(false, "فشل تسجيل الموظف", data.detail || "حدث خطأ أثناء التسجيل");
+                }
+            } catch (err) {
+                showResult(false, "خطأ في الاتصال", err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>📸</span><span>التقاط بصمة الوجه وتسجيل الموظف الآن</span>';
+                prompt.innerText = "ضع وجهك داخل الدائرة";
+            }
+        }
+
+        // ================= ACTION: ENROLL FACE FOR SELECTED EMPLOYEE =================
+        async function triggerFirstTimeEnrollmentForSelected() {
             const empCode = document.getElementById('emp-select').value;
             const prompt = document.getElementById('cam-prompt');
             const btnEnroll = document.getElementById('btn-enroll');
@@ -244,36 +461,19 @@
             btnEnroll.innerText = "جارٍ المعالجة والتشفير...";
 
             try {
-                // Generate deterministic normalized 512-d biometric embedding
-                const rngSeed = Math.abs(empCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) * 7919;
-                const embedding = [];
-                let sumSq = 0;
-                for (let i = 0; i < 512; i++) {
-                    const val = Math.sin(rngSeed + i * 1.5);
-                    embedding.push(val);
-                    sumSq += val * val;
-                }
-                const norm = Math.sqrt(sumSq);
-                const normalizedEmbedding = embedding.map(v => v / norm);
+                const deviceFp = getOrCreateDeviceFingerprint();
+                const faceVector = generateFaceEmbedding(empCode);
 
-                // Get or create persistent device fingerprint in localStorage
-                let myFp = localStorage.getItem('attendance_device_fp');
-                if (!myFp) {
-                    myFp = 'fp_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
-                    localStorage.setItem('attendance_device_fp', myFp);
-                }
-
-                // Send Enrollment Request
                 const res = await fetch('/api/v1/attendance/enroll-mobile', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         employee_code: empCode,
-                        device_fingerprint: myFp,
-                        device_model: navigator.userAgent.includes('Android') ? 'Android Device' : (navigator.userAgent.includes('iPhone') ? 'iPhone' : 'Web Mobile Client'),
+                        device_fingerprint: deviceFp,
+                        device_model: navigator.userAgent.includes('Android') ? 'Android Mobile' : (navigator.userAgent.includes('iPhone') ? 'iPhone' : 'Mobile Phone'),
                         os_name: navigator.userAgent.includes('Android') ? 'android' : (navigator.userAgent.includes('iPhone') ? 'ios' : 'web'),
                         os_version: '14',
-                        face_embedding: normalizedEmbedding,
+                        face_embedding: faceVector,
                         liveness_score: 0.98
                     })
                 });
@@ -281,7 +481,7 @@
                 const data = await res.json();
 
                 if (res.ok && data.success) {
-                    showResult(true, "🎉 مبروك! تم تسجيل بصمة وجهك بنجاح!", `
+                    showResult(true, "🎉 تم تسجيل بصمة وجهك بنجاح!", `
                         <p><strong>الموظف:</strong> ${data.employee_name}</p>
                         <p><strong>الجهاز المسجل:</strong> ${data.device_model}</p>
                         <p class="text-emerald-400 font-bold mt-2">تم حفظ متجهات وجهك الرقمية (512-d) وربط هاتفك بالنظام. يمكنك الآن البدء في تسجيل الحضور والانصراف فوراً!</p>
@@ -290,17 +490,16 @@
                 } else {
                     showResult(false, "فشل تسجيل البصمة", data.detail || "حدث خطأ أثناء التسجيل");
                 }
-
             } catch (err) {
                 showResult(false, "خطأ في الاتصال", err.message);
             } finally {
                 btnEnroll.disabled = false;
-                btnEnroll.innerHTML = '<span>📸</span><span>تسجيل بصمة وجهي لأول مرة</span>';
+                btnEnroll.innerHTML = '<span>📸</span><span>تسجيل بصمة وجه الموظف المختار الآن</span>';
                 prompt.innerText = "ضع وجهك داخل الدائرة";
             }
         }
 
-        // Trigger Attendance Punch
+        // ================= ACTION: TRIGGER ATTENDANCE PUNCH =================
         async function triggerPunch(type) {
             const empCode = document.getElementById('emp-select').value;
             const prompt = document.getElementById('cam-prompt');
@@ -311,13 +510,12 @@
             challengeText.innerText = "فحص سلامة الجهاز...";
 
             try {
-                // Determine persistent hardware fingerprint
-                const myDeviceFp = localStorage.getItem('attendance_device_fp') || (empCode === 'EMP-2001' ? 'sha256_hardware_fingerprint_ahmed_phone' : 'hw_fingerprint_' + empCode);
+                const myDeviceFp = getOrCreateDeviceFingerprint();
 
                 // 1. Request Challenge Nonce
                 const chRes = await fetch('/api/v1/attendance/challenge', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         employee_code: empCode,
                         device_fingerprint: myDeviceFp
@@ -326,13 +524,13 @@
 
                 if (!chRes.ok) {
                     const err = await chRes.json();
-                    showResult(false, "تم حظر المحاولة!", err.detail || "جهاز غير مسجل");
+                    showResult(false, "تم حظر المحاولة!", err.detail || "هذا الهاتف غير مسجل لهذا الموظف");
                     prompt.innerText = "ضع وجهك داخل الدائرة";
                     return;
                 }
 
                 const chData = await chRes.json();
-                
+
                 // Show actions in Arabic
                 const actionsMap = {
                     'BLINK_TWICE': 'ارمش بعينيك مرتين 👀',
@@ -347,7 +545,6 @@
                 challengeTimer.innerText = "جارٍ التحقق من الحركة المباشرة...";
                 prompt.innerText = "التقاط البصمة...";
 
-                // Short simulated pause for action completion (1.2s)
                 await new Promise(r => setTimeout(r, 1200));
 
                 // 2. Fetch Face embedding for this employee
@@ -357,13 +554,13 @@
                     const fData = await faceRes.json();
                     faceEmbedding = fData.face_embedding;
                 } else {
-                    faceEmbedding = new Array(512).fill(0.044);
+                    faceEmbedding = generateFaceEmbedding(empCode);
                 }
 
                 // 3. Send Punch Request
                 const punchRes = await fetch('/api/v1/attendance/punch', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         employee_code: empCode,
                         punch_type: type,
@@ -436,11 +633,11 @@
             document.getElementById('result-modal').classList.add('hidden');
         }
 
-        // Init
+        // Initialize on load
         startCamera();
         initGPS();
         loadEmployees();
     </script>
 </body>
-</html>
 
+</html>

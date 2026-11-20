@@ -8,7 +8,7 @@ from app.models import Employee, Branch, AttendanceLog, FraudAlert, Device
 from app.schemas import (
     ChallengeRequest, ChallengeResponse,
     PunchVerificationRequest, PunchVerificationResponse,
-    MobileEnrollRequest
+    MobileEnrollRequest, RegisterAndEnrollRequest
 )
 from app.security.geo_verifier import GeoVerifier
 from app.security.device_verifier import DeviceVerifier
@@ -76,6 +76,89 @@ def enroll_face_from_mobile(payload: MobileEnrollRequest, request: Request, db: 
         "message": f"تم تسجيل بصمة وجه الموظف {emp.full_name} وربط هاتفه بنجاح!",
         "employee_code": emp.employee_code,
         "employee_name": emp.full_name,
+        "device_model": device.device_model
+    }
+
+@router.post("/register-and-enroll")
+def register_and_enroll_employee(payload: RegisterAndEnrollRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    Complete Mobile Onboarding:
+    Registers a new employee (or updates non-enrolled employee),
+    captures and enrolls their face biometric (512-d vector),
+    and binds their physical mobile hardware device in one seamless step directly from the mobile app!
+    """
+    code = payload.employee_code.strip()
+    name = payload.full_name.strip()
+    if not code or not name:
+        raise HTTPException(status_code=400, detail="كود الموظف والاسم بالكامل مطلوبان")
+
+    if payload.liveness_score < 0.70:
+        raise HTTPException(status_code=400, detail="LOW_LIVENESS: Photo or screen detected. Real live face required.")
+
+    # Check if employee already exists
+    emp = db.query(Employee).filter(Employee.employee_code == code).first()
+    if emp:
+        if emp.is_face_enrolled:
+            raise HTTPException(
+                status_code=400,
+                detail=f"الموظف {emp.full_name} ({emp.employee_code}) مسجل بالفعل وبصمة وجهه مسجلة مسبقاً! إذا كنت ترغب بإعادة تسجيل البصمة يرجى طلب إعادة التعيين من لوحة الإدارة."
+            )
+        emp.full_name = name
+        if payload.department:
+            emp.department = payload.department
+        if payload.email:
+            emp.email = payload.email
+        if payload.phone:
+            emp.phone = payload.phone
+    else:
+        # Generate default email if not provided
+        emp_email = payload.email.strip() if payload.email and payload.email.strip() else f"{code.lower()}@company.local"
+        existing_email_emp = db.query(Employee).filter(Employee.email == emp_email).first()
+        if existing_email_emp:
+            emp_email = f"{code.lower()}_{int(datetime.now().timestamp())}@company.local"
+
+        emp = Employee(
+            employee_code=code,
+            full_name=name,
+            email=emp_email,
+            phone=payload.phone,
+            department=payload.department or "العام",
+            is_active=True,
+            is_face_enrolled=False
+        )
+        db.add(emp)
+        db.commit()
+        db.refresh(emp)
+
+    # Find or register device
+    device = db.query(Device).filter(Device.device_fingerprint == payload.device_fingerprint).first()
+    if not device:
+        device = Device(
+            device_fingerprint=payload.device_fingerprint,
+            device_model=payload.device_model,
+            os_name=payload.os_name,
+            os_version=payload.os_version,
+            is_trusted=True
+        )
+        db.add(device)
+        db.commit()
+        db.refresh(device)
+    elif device.is_blocked:
+        raise HTTPException(status_code=403, detail="DEVICE_BLOCKED: هذا الهاتف محظور من قبل مسؤول النظام.")
+
+    # Bind device & face embedding
+    emp.bound_device_id = device.id
+    emp.face_embedding = payload.face_embedding
+    emp.is_face_enrolled = True
+    db.commit()
+    db.refresh(emp)
+
+    return {
+        "success": True,
+        "message": f"تم تسجيل الموظف {emp.full_name} وحفظ بصمة الوجه وربط الهاتف بنجاح!",
+        "employee_code": emp.employee_code,
+        "full_name": emp.full_name,
+        "department": emp.department,
         "device_model": device.device_model
     }
 

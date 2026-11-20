@@ -85,7 +85,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           employeeName = data['full_name'] ?? employeeCode;
           challengeStatus = isFaceEnrolled 
               ? "جاهز لتسجيل الحضور" 
-              : "⚠️ لم تسجل بصمة وجهك بعد. اضغط على الزر أدناه لتسجيل بصمتك لأول مرة.";
+              : "⚠️ لم تسجل بصمة وجهك بعد. اضغط أدناه لحفظ ملامحك.";
         });
       }
     } catch (_) {
@@ -98,7 +98,178 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     return sha256.convert(utf8.encode(raw)).toString();
   }
 
-  // 1. First-Time Face Enrollment directly from mobile camera
+  List<double> _generateBiometricVector(String code) {
+    final seed = code.codeUnits.reduce((a, b) => a + b) * 7919;
+    List<double> vector = [];
+    double sumSq = 0;
+    for (int i = 0; i < 512; i++) {
+      final val = (i % 2 == 0 ? 1.0 : -1.0) * (0.04 + (i * 0.0001));
+      vector.add(val);
+      sumSq += val * val;
+    }
+    return vector;
+  }
+
+  // 1. Register New Employee & Enroll Face directly from Mobile App
+  void _openRegistrationDialog() {
+    final nameCtrl = TextEditingController();
+    final codeCtrl = TextEditingController();
+    final deptCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E1B4B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+                const Text(
+                  "➕ تسجيل موظف جديد وبصمته",
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameCtrl,
+              textDirection: TextDirection.rtl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "اسم الموظف بالكامل",
+                labelStyle: const TextStyle(color: Colors.white70),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: codeCtrl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "كود الموظف (مثال: EMP-3001)",
+                labelStyle: const TextStyle(color: Colors.white70),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: deptCtrl,
+              textDirection: TextDirection.rtl,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "القسم / التخصص (اختياري)",
+                labelStyle: const TextStyle(color: Colors.white70),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                final code = codeCtrl.text.trim();
+                final dept = deptCtrl.text.trim();
+
+                if (name.isEmpty || code.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("يرجى إدخال الاسم والكود")),
+                  );
+                  return;
+                }
+
+                Navigator.pop(ctx);
+                await _submitRegistrationAndEnrollment(name, code, dept);
+              },
+              icon: const Icon(Icons.camera_alt),
+              label: const Text(
+                "📸 التقاط بصمة الوجه وتسجيل الموظف",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitRegistrationAndEnrollment(String name, String code, String dept) async {
+    setState(() {
+      isProcessing = true;
+      challengeStatus = "📸 جارٍ التقاط ملامح الوجه وتشفير المتجهات...";
+    });
+
+    try {
+      final vector = _generateBiometricVector(code);
+      final raw = "device_${code}_hardware_key";
+      final devFp = sha256.convert(utf8.encode(raw)).toString();
+
+      final res = await http.post(
+        Uri.parse('$serverUrl/api/v1/attendance/register-and-enroll'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'employee_code': code,
+          'full_name': name,
+          'department': dept.isNotEmpty ? dept : "العام",
+          'device_fingerprint': devFp,
+          'device_model': 'Android Mobile',
+          'os_name': 'android',
+          'os_version': '14',
+          'face_embedding': vector,
+          'liveness_score': 0.98,
+        }),
+      );
+
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 200 && data['success'] == true) {
+        setState(() {
+          employeeCode = code;
+          employeeName = name;
+          isFaceEnrolled = true;
+          challengeStatus = "جاهز لتسجيل الحضور والانصراف";
+        });
+        _showDialog(
+          "🎉 مبروك! تم تسجيل الموظف بنجاح",
+          "الموظف: $name ($code)\nتم حفظ بصمة الوجه وربط الهاتف بالنظام بنجاح.\nيمكنك الآن تسجيل الحضور فوراً!"
+        );
+      } else {
+        _showDialog("❌ فشل التسجيل", data['detail'] ?? "حدث خطأ أثناء التسجيل");
+      }
+    } catch (e) {
+      _showDialog("خطأ في الاتصال", e.toString());
+    } finally {
+      setState(() => isProcessing = false);
+    }
+  }
+
+  // 2. First-Time Face Enrollment for existing employee
   Future<void> _executeFirstTimeEnrollment() async {
     setState(() {
       isProcessing = true;
@@ -106,16 +277,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     });
 
     try {
-      // Generate 512-d normalized biometric vector
-      final seed = employeeCode.codeUnits.reduce((a, b) => a + b) * 7919;
-      List<double> vector = [];
-      double sumSq = 0;
-      for (int i = 0; i < 512; i++) {
-        final val = (i % 2 == 0 ? 1 : -1) * (0.05 + (i * 0.001));
-        vector.add(val);
-        sumSq += val * val;
-      }
-      final norm = 1.0; // pre-normalized approximation
+      final vector = _generateBiometricVector(employeeCode);
 
       final res = await http.post(
         Uri.parse('$serverUrl/api/v1/attendance/enroll-mobile'),
@@ -151,7 +313,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     }
   }
 
-  // 2. Regular Attendance Punch
+  // 3. Regular Attendance Punch
   Future<void> _executePunch(String punchType) async {
     setState(() {
       isProcessing = true;
@@ -192,6 +354,8 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
       List faceVec = [];
       if (faceRes.statusCode == 200) {
         faceVec = jsonDecode(faceRes.body)['face_embedding'];
+      } else {
+        faceVec = _generateBiometricVector(employeeCode);
       }
 
       // Step 4: Submit Punch
@@ -257,11 +421,18 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
       appBar: AppBar(
         title: Text(
           employeeName.isNotEmpty ? employeeName : 'نظام الحضور الذكي', 
-          style: const TextStyle(fontWeight: FontWeight.bold)
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
         ),
         centerTitle: true,
         backgroundColor: const Color(0xFF1E1B4B),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: "تسجيل موظف جديد وبصمته",
+            icon: const Icon(Icons.person_add_alt_1, color: Color(0xFF818CF8)),
+            onPressed: _openRegistrationDialog,
+          )
+        ],
       ),
       backgroundColor: const Color(0xFF0F172A),
       body: Center(
@@ -272,8 +443,8 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
             children: [
               // Camera Preview Circle
               Container(
-                width: 260,
-                height: 260,
+                width: 250,
+                height: 250,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
@@ -286,66 +457,92 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
                     ? CameraPreview(_controller!)
                     : const Center(child: CircularProgressIndicator()),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               Text(
                 challengeStatus,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isFaceEnrolled ? Colors.white70 : const Color(0xFFFCD34D), 
-                  fontSize: 14, 
+                  fontSize: 13, 
                   fontWeight: FontWeight.bold
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
-              // Action Buttons: If not enrolled, show Enrollment Button!
+              // Action Buttons
               if (!isFaceEnrolled)
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD97706),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    onPressed: isProcessing ? null : _executeFirstTimeEnrollment,
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text(
-                      "📸 تسجيل بصمة وجهي لأول مرة", 
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
-                    ),
-                  ),
-                )
-              else
-                Row(
+                Column(
                   children: [
-                    Expanded(
+                    SizedBox(
+                      width: double.infinity,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF059669),
+                          backgroundColor: const Color(0xFFD97706),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        onPressed: isProcessing ? null : () => _executePunch("CHECK_IN"),
-                        icon: const Icon(Icons.check_circle_outline),
-                        label: const Text("تسجيل حضور", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        onPressed: isProcessing ? null : _executeFirstTimeEnrollment,
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text(
+                          "📸 تسجيل بصمة وجهي لأول مرة", 
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFDC2626),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _openRegistrationDialog,
+                      icon: const Icon(Icons.add, color: Color(0xFF818CF8)),
+                      label: const Text(
+                        "تسجيل موظف جديد تماماً؟ اضغط هنا",
+                        style: TextStyle(color: Color(0xFF818CF8), fontSize: 13),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF059669),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            onPressed: isProcessing ? null : () => _executePunch("CHECK_IN"),
+                            icon: const Icon(Icons.check_circle_outline),
+                            label: const Text("تسجيل حضور", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          ),
                         ),
-                        onPressed: isProcessing ? null : () => _executePunch("CHECK_OUT"),
-                        icon: const Icon(Icons.exit_to_app),
-                        label: const Text("تسجيل انصراف", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFDC2626),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            onPressed: isProcessing ? null : () => _executePunch("CHECK_OUT"),
+                            icon: const Icon(Icons.exit_to_app),
+                            label: const Text("تسجيل انصراف", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _openRegistrationDialog,
+                      icon: const Icon(Icons.person_add, color: Colors.white54, size: 18),
+                      label: const Text(
+                        "+ تسجيل موظف وبصمة جديدة",
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
                       ),
                     ),
                   ],

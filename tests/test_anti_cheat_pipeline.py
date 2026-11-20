@@ -296,3 +296,36 @@ def test_cheat_attempt_replay_attack():
     res2 = client.post("/api/v1/attendance/punch", json=payload)
     assert res2.json()["success"] is False
     assert "REPLAY_ATTACK_DETECTED" in res2.json()["rejection_reason"]
+
+
+def test_register_and_enroll_from_mobile():
+    """Attack / Scenario 6: Test brand new employee registration and face biometric enrollment directly from mobile."""
+    rng = np.random.RandomState(99)
+    sample_face = rng.randn(512).astype(np.float32)
+    sample_face = (sample_face / np.linalg.norm(sample_face)).tolist()
+
+    res = client.post("/api/v1/attendance/register-and-enroll", json={
+        "employee_code": "EMP-9999",
+        "full_name": "Kareem Tarek",
+        "department": "Engineering",
+        "email": "kareem@company.com",
+        "device_fingerprint": "kareem_phone_fingerprint_xyz",
+        "device_model": "Pixel 8 Pro",
+        "os_name": "android",
+        "os_version": "14",
+        "face_embedding": sample_face,
+        "liveness_score": 0.98
+    })
+
+    assert res.status_code == 200
+    data = res.json()
+    assert data["success"] is True
+    assert data["employee_code"] == "EMP-9999"
+    assert data["full_name"] == "Kareem Tarek"
+
+    # Verify employee status is now enrolled
+    status_res = client.get("/api/v1/attendance/status/EMP-9999")
+    assert status_res.status_code == 200
+    status_data = status_res.json()
+    assert status_data["is_face_enrolled"] is True
+    assert status_data["is_device_bound"] is True

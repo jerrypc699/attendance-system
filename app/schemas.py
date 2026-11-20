@@ -57,6 +57,19 @@ class MobileEnrollRequest(BaseModel):
     face_embedding: List[float]
     liveness_score: float = Field(default=0.95, ge=0.0, le=1.0)
 
+class RegisterAndEnrollRequest(BaseModel):
+    employee_code: str
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    device_fingerprint: str
+    device_model: str = "Mobile Phone"
+    os_name: str = "android"
+    os_version: str = "14"
+    face_embedding: List[float]
+    liveness_score: float = Field(default=0.95, ge=0.0, le=1.0)
+
 class EmployeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
