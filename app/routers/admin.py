@@ -113,6 +113,19 @@ def enroll_sample_face(employee_code: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": f"Biometric sample enrolled successfully for {employee.full_name}.", "embedding": vec}
 
+@router.post("/employees/{employee_code}/reset-face")
+def reset_employee_face(employee_code: str, db: Session = Depends(get_db)):
+    """Reset an employee's biometric profile and bound device so they can re-enroll from mobile"""
+    employee = db.query(Employee).filter(Employee.employee_code == employee_code).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+
+    employee.is_face_enrolled = False
+    employee.face_embedding = None
+    employee.bound_device_id = None
+    db.commit()
+    return {"message": f"Biometric profile reset for {employee.full_name}. They can now enroll from the mobile app."}
+
 # ----------------- DEVICE BINDING -----------------
 @router.post("/devices/register", response_model=DeviceResponse)
 def register_and_bind_device(payload: DeviceRegisterRequest, db: Session = Depends(get_db)):

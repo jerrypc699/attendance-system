@@ -7,13 +7,77 @@ from app.database import get_db
 from app.models import Employee, Branch, AttendanceLog, FraudAlert, Device
 from app.schemas import (
     ChallengeRequest, ChallengeResponse,
-    PunchVerificationRequest, PunchVerificationResponse
+    PunchVerificationRequest, PunchVerificationResponse,
+    MobileEnrollRequest
 )
 from app.security.geo_verifier import GeoVerifier
 from app.security.device_verifier import DeviceVerifier
 from app.security.biometric_verifier import BiometricVerifier
 
 router = APIRouter(prefix="/api/v1/attendance", tags=["Attendance Punch"])
+
+@router.get("/status/{employee_code}")
+def get_employee_enrollment_status(employee_code: str, db: Session = Depends(get_db)):
+    """Check if an employee is already enrolled or needs first-time setup"""
+    emp = db.query(Employee).filter(Employee.employee_code == employee_code).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return {
+        "employee_code": emp.employee_code,
+        "full_name": emp.full_name,
+        "is_face_enrolled": emp.is_face_enrolled,
+        "is_device_bound": bool(emp.bound_device_id),
+        "department": emp.department
+    }
+
+@router.post("/enroll-mobile")
+def enroll_face_from_mobile(payload: MobileEnrollRequest, request: Request, db: Session = Depends(get_db)):
+    """
+    First-time Face Biometric Enrollment & 1:1 Hardware Device Binding directly from mobile camera!
+    """
+    emp = db.query(Employee).filter(Employee.employee_code == payload.employee_code).first()
+    if not emp or not emp.is_active:
+        raise HTTPException(status_code=404, detail="Employee not found or inactive")
+
+    # Anti-Tampering: Prevent hijacking by re-enrolling someone else's face
+    if emp.is_face_enrolled:
+        raise HTTPException(
+            status_code=400,
+            detail="FACE_ALREADY_ENROLLED: Face biometric is already registered. If you need to re-enroll, request HR Admin to reset your biometric profile."
+        )
+
+    if payload.liveness_score < 0.70:
+        raise HTTPException(status_code=400, detail="LOW_LIVENESS: Photo or screen detected. Real live face required.")
+
+    # Find or create device
+    device = db.query(Device).filter(Device.device_fingerprint == payload.device_fingerprint).first()
+    if not device:
+        device = Device(
+            device_fingerprint=payload.device_fingerprint,
+            device_model=payload.device_model,
+            os_name=payload.os_name,
+            os_version=payload.os_version,
+            is_trusted=True
+        )
+        db.add(device)
+        db.commit()
+        db.refresh(device)
+    elif device.is_blocked:
+        raise HTTPException(status_code=403, detail="DEVICE_BLOCKED: This device is blocked by administrator.")
+
+    # Bind device & face embedding
+    emp.bound_device_id = device.id
+    emp.face_embedding = payload.face_embedding
+    emp.is_face_enrolled = True
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"تم تسجيل بصمة وجه الموظف {emp.full_name} وربط هاتفه بنجاح!",
+        "employee_code": emp.employee_code,
+        "employee_name": emp.full_name,
+        "device_model": device.device_model
+    }
 
 @router.post("/challenge", response_model=ChallengeResponse)
 def get_liveness_challenge(payload: ChallengeRequest, db: Session = Depends(get_db)):

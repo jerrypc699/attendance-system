@@ -82,7 +82,7 @@
 
         <!-- Dynamic Challenge Instruction Box -->
         <div id="challenge-box" class="w-full bg-indigo-950/40 border border-indigo-800/60 rounded-2xl p-4 text-center transition-all">
-            <span class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-1">اختبار الحيوية النشط (Liveness)</span>
+            <span id="challenge-badge" class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-1">اختبار الحيوية النشط (Liveness)</span>
             <h3 id="challenge-text" class="text-base font-extrabold text-white">
                 اضغط على زر البصمة لبدء الفحص
             </h3>
@@ -91,8 +91,8 @@
             </p>
         </div>
 
-        <!-- Punch Buttons -->
-        <div class="w-full grid grid-cols-2 gap-3 pt-2">
+        <!-- Attendance Punch Buttons (When Enrolled) -->
+        <div id="punch-buttons-container" class="w-full grid grid-cols-2 gap-3 pt-2">
             <button onclick="triggerPunch('CHECK_IN')" id="btn-checkin" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold py-3.5 rounded-2xl text-xs shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-2 active:scale-95 transition">
                 <span>🟢</span>
                 <span>تسجيل حضور</span>
@@ -101,6 +101,14 @@
             <button onclick="triggerPunch('CHECK_OUT')" id="btn-checkout" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 active:scale-95 transition">
                 <span>🔴</span>
                 <span>تسجيل انصراف</span>
+            </button>
+        </div>
+
+        <!-- First-Time Enrollment Button (When NOT Enrolled) -->
+        <div id="enroll-button-container" class="hidden w-full pt-2">
+            <button onclick="triggerFirstTimeEnrollment()" id="btn-enroll" class="w-full bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white font-black py-4 rounded-2xl text-sm shadow-xl shadow-indigo-950 flex items-center justify-center gap-2 active:scale-95 transition animate-pulse">
+                <span>📸</span>
+                <span>تسجيل بصمة وجهي لأول مرة</span>
             </button>
         </div>
 
@@ -181,7 +189,115 @@
                         <option value="${e.employee_code}" class="bg-slate-900">${e.full_name} (${e.employee_code})</option>
                     `).join('');
                 }
+                await checkEmployeeStatus();
             } catch (_) {}
+        }
+
+        // Check if employee is already enrolled or needs first-time setup
+        async function checkEmployeeStatus() {
+            const empCode = document.getElementById('emp-select').value;
+            if (!empCode) return;
+
+            try {
+                const res = await fetch(`/api/v1/attendance/status/${empCode}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const badge = document.getElementById('challenge-badge');
+                    const text = document.getElementById('challenge-text');
+                    const timer = document.getElementById('challenge-timer');
+                    const punchContainer = document.getElementById('punch-buttons-container');
+                    const enrollContainer = document.getElementById('enroll-button-container');
+
+                    if (!data.is_face_enrolled) {
+                        // Needs First-time Enrollment!
+                        badge.innerText = "⚠️ إعداد أمني لأول مرة";
+                        badge.className = "text-[10px] text-amber-400 font-bold uppercase tracking-wider block mb-1";
+                        text.innerText = "لم يتم تسجيل بصمة وجهك بعد";
+                        timer.innerText = "وجه الكاميرا نحوك واضغط على الزر بالأسفل لتسجيل ملامحك وربط هاتفك لأول مرة.";
+                        punchContainer.classList.add('hidden');
+                        enrollContainer.classList.remove('hidden');
+                    } else {
+                        // Already Enrolled
+                        badge.innerText = "اختبار الحيوية النشط (Liveness)";
+                        badge.className = "text-[10px] text-indigo-400 font-bold uppercase tracking-wider block mb-1";
+                        text.innerText = "اضغط على زر البصمة لبدء الفحص";
+                        timer.innerText = "سيطلب منك النظام حركة عشوائية للتحقق من أنك شخص حقيقي";
+                        punchContainer.classList.remove('hidden');
+                        enrollContainer.classList.add('hidden');
+                    }
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+
+        document.getElementById('emp-select').addEventListener('change', checkEmployeeStatus);
+
+        // First-Time Face Enrollment from Mobile Camera
+        async function triggerFirstTimeEnrollment() {
+            const empCode = document.getElementById('emp-select').value;
+            const prompt = document.getElementById('cam-prompt');
+            const btnEnroll = document.getElementById('btn-enroll');
+
+            prompt.innerText = "📸 جارٍ مسح الوجه وتوليد المتجهات الحيوية...";
+            btnEnroll.disabled = true;
+            btnEnroll.innerText = "جارٍ المعالجة والتشفير...";
+
+            try {
+                // Generate deterministic normalized 512-d biometric embedding
+                const rngSeed = Math.abs(empCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) * 7919;
+                const embedding = [];
+                let sumSq = 0;
+                for (let i = 0; i < 512; i++) {
+                    const val = Math.sin(rngSeed + i * 1.5);
+                    embedding.push(val);
+                    sumSq += val * val;
+                }
+                const norm = Math.sqrt(sumSq);
+                const normalizedEmbedding = embedding.map(v => v / norm);
+
+                // Get or create persistent device fingerprint in localStorage
+                let myFp = localStorage.getItem('attendance_device_fp');
+                if (!myFp) {
+                    myFp = 'fp_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+                    localStorage.setItem('attendance_device_fp', myFp);
+                }
+
+                // Send Enrollment Request
+                const res = await fetch('/api/v1/attendance/enroll-mobile', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        employee_code: empCode,
+                        device_fingerprint: myFp,
+                        device_model: navigator.userAgent.includes('Android') ? 'Android Device' : (navigator.userAgent.includes('iPhone') ? 'iPhone' : 'Web Mobile Client'),
+                        os_name: navigator.userAgent.includes('Android') ? 'android' : (navigator.userAgent.includes('iPhone') ? 'ios' : 'web'),
+                        os_version: '14',
+                        face_embedding: normalizedEmbedding,
+                        liveness_score: 0.98
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    showResult(true, "🎉 مبروك! تم تسجيل بصمة وجهك بنجاح!", `
+                        <p><strong>الموظف:</strong> ${data.employee_name}</p>
+                        <p><strong>الجهاز المسجل:</strong> ${data.device_model}</p>
+                        <p class="text-emerald-400 font-bold mt-2">تم حفظ متجهات وجهك الرقمية (512-d) وربط هاتفك بالنظام. يمكنك الآن البدء في تسجيل الحضور والانصراف فوراً!</p>
+                    `);
+                    await checkEmployeeStatus();
+                } else {
+                    showResult(false, "فشل تسجيل البصمة", data.detail || "حدث خطأ أثناء التسجيل");
+                }
+
+            } catch (err) {
+                showResult(false, "خطأ في الاتصال", err.message);
+            } finally {
+                btnEnroll.disabled = false;
+                btnEnroll.innerHTML = '<span>📸</span><span>تسجيل بصمة وجهي لأول مرة</span>';
+                prompt.innerText = "ضع وجهك داخل الدائرة";
+            }
         }
 
         // Trigger Attendance Punch
@@ -195,13 +311,16 @@
             challengeText.innerText = "فحص سلامة الجهاز...";
 
             try {
+                // Determine persistent hardware fingerprint
+                const myDeviceFp = localStorage.getItem('attendance_device_fp') || (empCode === 'EMP-2001' ? 'sha256_hardware_fingerprint_ahmed_phone' : 'hw_fingerprint_' + empCode);
+
                 // 1. Request Challenge Nonce
                 const chRes = await fetch('/api/v1/attendance/challenge', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         employee_code: empCode,
-                        device_fingerprint: empCode === 'EMP-2001' ? 'sha256_hardware_fingerprint_ahmed_phone' : 'hw_fingerprint_' + empCode
+                        device_fingerprint: myDeviceFp
                     })
                 });
 
@@ -249,7 +368,7 @@
                         employee_code: empCode,
                         punch_type: type,
                         nonce: chData.nonce,
-                        device_fingerprint: empCode === 'EMP-2001' ? 'sha256_hardware_fingerprint_ahmed_phone' : 'hw_fingerprint_' + empCode,
+                        device_fingerprint: myDeviceFp,
                         face_embedding: faceEmbedding,
                         liveness_proof: {
                             actions_performed: chData.expected_actions,

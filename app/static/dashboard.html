@@ -629,8 +629,11 @@
                             '<span class="text-slate-400">غير مرتبط</span>'}
                     </td>
                     <td class="p-3.5 text-center flex items-center justify-center gap-1.5">
+                        <button onclick="resetEmployeeFace('${e.employee_code}')" title="إعادة تعيين البصمة ليمسحها ويسجلها من تطبيق الهاتف" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-bold text-[10px] transition border border-amber-200">
+                            🔄 إعادة تعيين للموبايل
+                        </button>
                         <button onclick="enrollSampleFace('${e.employee_code}')" title="توليد بصمة وجه رقمية ذكية" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-bold text-[11px] transition">
-                            📸 تسجيل البصمة
+                            📸 توليد بصمة
                         </button>
                         <button onclick="deleteEmployee('${e.id}')" title="حذف الموظف" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1">
                             🗑️
@@ -765,6 +768,17 @@
                 loadData();
             } else {
                 showToast("فشل تسجيل البصمة", true);
+            }
+        }
+
+        async function resetEmployeeFace(empCode) {
+            if (!confirm(`هل تريد إعادة تعيين بصمة الموظف ${empCode}؟\nسيتمكن الموظف الآن من فتح التطبيق من هاتفه وتسجيل وجهه لأول مرة مباشرة من الكاميرا!`)) return;
+            const res = await fetch(`/api/v1/admin/employees/${empCode}/reset-face`, {method: 'POST'});
+            if (res.ok) {
+                showToast(`تمت إعادة تعيين بصمة ${empCode}. الموظف يستطيع الآن التسجيل من الموبايل.`);
+                loadData();
+            } else {
+                showToast("فشل إعادة التعيين", true);
             }
         }
 
