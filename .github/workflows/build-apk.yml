@@ -71,8 +71,8 @@ jobs:
                   g = gp.read_text(encoding="utf-8")
                   g = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 21', g)
                   g = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', g)
-                  g = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 35', g)
-                  g = re.sub(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 35', g)
+                  g = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36', g)
+                  g = re.sub(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 36', g)
                   gp.write_text(g, encoding="utf-8")
           PYEOF
 
@@ -146,9 +146,10 @@ jobs:
           with plist_path.open("wb") as f:
               plistlib.dump(data, f)
 
+          import re
           pbx = Path("ios/Runner.xcodeproj/project.pbxproj")
           t = pbx.read_text(encoding="utf-8")
-          t = t.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
+          t = re.sub(r'IPHONEOS_DEPLOYMENT_TARGET\s*=\s*[0-9\.]+;', 'IPHONEOS_DEPLOYMENT_TARGET = 15.5;', t)
           pbx.write_text(t, encoding="utf-8")
           PYEOF
 
@@ -159,8 +160,8 @@ jobs:
         run: |
           flutter pub get
           if [ -f ios/Podfile ]; then
-            sed -i '' "s/^# *platform :ios.*/platform :ios, '13.0'/" ios/Podfile || true
-            sed -i '' "s/^platform :ios.*/platform :ios, '13.0'/" ios/Podfile || true
+            sed -i '' "s/^# *platform :ios.*/platform :ios, '15.5'/" ios/Podfile || true
+            sed -i '' "s/^platform :ios.*/platform :ios, '15.5'/" ios/Podfile || true
           fi
           flutter build ios --release --no-codesign --dart-define=API_URL="$API_URL"
           mkdir -p build/ipa_stage/Payload
