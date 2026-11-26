@@ -291,13 +291,19 @@
                             <input id="filter-date-to" type="date"
                                 class="text-xs p-2 rounded-xl border border-slate-300">
                         </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">الموظف</label>
+                            <select id="filter-emp-code" class="text-xs p-2 rounded-xl border border-slate-300 bg-white min-w-[140px]">
+                                <option value="">كل الموظفين</option>
+                            </select>
+                        </div>
                         <button onclick="loadLogsFiltered()"
                             class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl">🔍
                             تصفية</button>
                     </div>
-                    <button onclick="exportExcelCsv()"
+                    <button onclick="exportExcelWorkbook()"
                         class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow flex items-center gap-1.5">
-                        <span>📊</span><span>تصدير تقرير Excel (CSV)</span>
+                        <span>📊</span><span>تصدير تقرير Excel الاحترافي (.xlsx)</span>
                     </button>
                 </div>
 
@@ -386,6 +392,21 @@
                             <div>
                                 <label class="block font-bold text-slate-700 mb-1">مدة تجديد QR المدخل (ثانية)</label>
                                 <input id="set-qr-rot" type="number" min="10" max="60"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">موعد بداية الدوام الرسمي (لحساب التأخير)</label>
+                                <input id="set-work-start" type="time" value="09:00"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">فترة السماح بالتأخير (دقيقة)</label>
+                                <input id="set-late-grace" type="number" min="0" max="120" value="15"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">المنطقة الزمنية للتقارير (فرق الساعات عن UTC)</label>
+                                <input id="set-tz-offset" type="number" min="-12" max="14" value="2"
                                     class="w-full p-2.5 rounded-xl border border-slate-300">
                             </div>
                         </div>
@@ -836,6 +857,14 @@
         }
 
         function renderEmployees(list) {
+            const sel = document.getElementById('filter-emp-code');
+            if (sel) {
+                const cur = sel.value;
+                sel.innerHTML = '<option value="">كل الموظفين</option>' + list.map(e =>
+                    `<option value="${escapeHtml(e.employee_code)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_code)})</option>`
+                ).join('');
+                sel.value = cur;
+            }
             const tbody = document.getElementById('employees-table-body');
             if (!list.length) {
                 tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400">لا يوجد موظفين مسجلين حالياً</td></tr>';
@@ -980,6 +1009,9 @@
             document.getElementById('set-nonce-ttl').value = s.CHALLENGE_EXPIRY_SECONDS;
             document.getElementById('set-gps-acc').value = s.MAX_GPS_ACCURACY_THRESHOLD_METERS;
             document.getElementById('set-qr-rot').value = s.QR_ROTATION_SECONDS;
+            document.getElementById('set-work-start').value = s.WORK_START_TIME || '09:00';
+            document.getElementById('set-late-grace').value = s.LATE_GRACE_MINUTES ?? 15;
+            document.getElementById('set-tz-offset').value = s.TIMEZONE_OFFSET_HOURS ?? 2;
             document.getElementById('set-req-ai').checked = !!s.REQUIRE_SERVER_FACE_AI;
             document.getElementById('set-req-anchor').checked = !!s.REQUIRE_WIFI_OR_BEACON;
             document.getElementById('set-dup-guard').checked = !!s.PREVENT_DUPLICATE_PUNCH;
@@ -1279,29 +1311,36 @@
         async function loadLogsFiltered() {
             const df = document.getElementById('filter-date-from').value;
             const dt = document.getElementById('filter-date-to').value;
+            const ec = document.getElementById('filter-emp-code')?.value || '';
             const qs = new URLSearchParams({ limit: '200' });
             if (df) qs.set('date_from', df);
             if (dt) qs.set('date_to', dt);
+            if (ec) qs.set('employee_code', ec);
             const res = await apiFetch('/api/v1/admin/attendance-logs?' + qs.toString());
             const logs = await res.json();
             renderLogs(logs);
             showToast(`تم عرض ${logs.length} سجل`);
         }
 
-        async function exportExcelCsv() {
+        async function exportExcelWorkbook() {
             const df = document.getElementById('filter-date-from').value;
             const dt = document.getElementById('filter-date-to').value;
-            const qs = new URLSearchParams();
+            const ec = document.getElementById('filter-emp-code')?.value || '';
+            const qs = new URLSearchParams({ format: 'xlsx' });
             if (df) qs.set('date_from', df);
             if (dt) qs.set('date_to', dt);
+            if (ec) qs.set('employee_code', ec);
+            showToast('⏳ جاري تجهيز ملف Excel الاحترافي...');
             const res = await apiFetch('/api/v1/admin/reports/export?' + qs.toString());
+            if (!res.ok) return showToast('تعذر تصدير تقرير Excel', true);
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.download = `WalaaHR_Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`;
             a.click();
             URL.revokeObjectURL(url);
+            showToast('✅ تم تحميل تقرير Excel (3 شيتات مجمّعة) بنجاح!');
         }
 
         async function openProtectedPhoto(snapshotPath, name, timeStr) {
@@ -1327,6 +1366,9 @@
                 CHALLENGE_EXPIRY_SECONDS: parseInt(document.getElementById('set-nonce-ttl').value),
                 MAX_GPS_ACCURACY_THRESHOLD_METERS: parseFloat(document.getElementById('set-gps-acc').value),
                 QR_ROTATION_SECONDS: parseInt(document.getElementById('set-qr-rot').value),
+                WORK_START_TIME: document.getElementById('set-work-start').value || '09:00',
+                LATE_GRACE_MINUTES: parseInt(document.getElementById('set-late-grace').value) || 0,
+                TIMEZONE_OFFSET_HOURS: parseInt(document.getElementById('set-tz-offset').value) || 2,
                 REQUIRE_SERVER_FACE_AI: document.getElementById('set-req-ai').checked,
                 REQUIRE_WIFI_OR_BEACON: document.getElementById('set-req-anchor').checked,
                 PREVENT_DUPLICATE_PUNCH: document.getElementById('set-dup-guard').checked

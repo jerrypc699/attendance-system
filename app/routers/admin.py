@@ -11,8 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
 from app.database import get_db
 from app.models import AdminUser, AttendanceLog, Branch, Device, Employee, FraudAlert
+from app.reports.excel_report import build_attendance_excel_workbook
 from app.schemas import (
     BranchCreate,
     BranchResponse,
@@ -549,85 +551,86 @@ def get_attendance_logs(
 
 
 @router.get("/reports/export")
-def export_attendance_csv(
+def export_attendance_report(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    status_filter: Optional[str] = "APPROVED",
+    employee_code: Optional[str] = None,
+    format: str = Query(default="xlsx", pattern="^(xlsx|csv)$"),
     db: Session = Depends(get_db),
 ):
-    """Exports attendance report as UTF-8 BOM CSV (opens Arabic text cleanly in Excel)."""
+    """
+    Exports an executive 3-sheet RTL Arabic Excel (.xlsx) report grouping each employee's
+    daily Check-In & Check-Out into one row with work hours, late minutes, payroll summary,
+    and full audit trail. Also supports ?format=csv.
+    """
+    cfg = get_runtime_settings(db)
+    tz_offset = int(cfg.get("TIMEZONE_OFFSET_HOURS", 2))
+    work_start = str(cfg.get("WORK_START_TIME", "09:00"))
+    late_grace = int(cfg.get("LATE_GRACE_MINUTES", 15))
+    local_tz = timezone(timedelta(hours=tz_offset))
+
     q = (
         db.query(AttendanceLog)
         .options(joinedload(AttendanceLog.employee), joinedload(AttendanceLog.branch))
         .order_by(AttendanceLog.server_timestamp.desc())
     )
-    if status_filter in ("APPROVED", "REJECTED"):
-        q = q.filter(AttendanceLog.status == status_filter)
+    if employee_code and employee_code.strip():
+        q = q.join(Employee).filter(Employee.employee_code == employee_code.strip().upper())
+
     if date_from:
         try:
-            q = q.filter(AttendanceLog.server_timestamp >= datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc))
+            local_start = datetime.fromisoformat(date_from).replace(hour=0, minute=0, second=0, tzinfo=local_tz)
+            q = q.filter(AttendanceLog.server_timestamp >= local_start.astimezone(timezone.utc))
         except ValueError:
             pass
     if date_to:
         try:
-            q = q.filter(
-                AttendanceLog.server_timestamp
-                < datetime.fromisoformat(date_to).replace(tzinfo=timezone.utc) + timedelta(days=1)
-            )
+            local_end = (datetime.fromisoformat(date_to).replace(hour=0, minute=0, second=0, tzinfo=local_tz) + timedelta(days=1))
+            q = q.filter(AttendanceLog.server_timestamp < local_end.astimezone(timezone.utc))
         except ValueError:
             pass
 
-    logs = q.limit(5000).all()
+    logs = q.limit(10000).all()
+    stamp = datetime.now(local_tz).strftime("%Y%m%d_%H%M")
 
-    buf = io.StringIO()
-    buf.write("\ufeff")  # UTF-8 BOM for Arabic Excel compatibility
-    writer = csv.writer(buf)
-    writer.writerow(
-        [
-            "كود الموظف",
-            "اسم الموظف",
-            "القسم",
-            "الفرع",
-            "النوع",
-            "الحالة",
-            "التوقيت الرسمي (UTC)",
-            "المسافة (متر)",
-            "تطابق الوجه %",
-            "درجة الحيوية %",
-            "تحقق IP الشركة",
-            "تحقق QR",
-            "تحقق Wi-Fi",
-            "IP الموظف",
-            "سبب الرفض",
-        ]
-    )
-    for l in logs:
-        writer.writerow(
-            [
-                l.employee.employee_code if l.employee else "",
-                l.employee.full_name if l.employee else "",
-                l.employee.department if l.employee else "",
-                l.branch.name if l.branch else "",
-                "حضور" if l.punch_type == "CHECK_IN" else "انصراف",
-                "مقبول" if l.status == "APPROVED" else "مرفوض",
-                _iso_utc(l.server_timestamp) or "",
-                round(l.distance_to_branch_meters, 1) if l.distance_to_branch_meters is not None else "",
-                round(l.face_similarity_score * 100, 1) if l.face_similarity_score is not None else "",
-                round(l.liveness_score * 100, 1) if l.liveness_score is not None else "",
-                "نعم" if l.office_ip_verified else "لا",
-                "نعم" if l.qr_verified else "لا",
-                "نعم" if l.wifi_bssid_verified else "لا",
-                l.client_ip or "",
-                l.rejection_reason or "",
-            ]
+    if format == "csv":
+        buf = io.StringIO()
+        buf.write("\ufeff")
+        writer = csv.writer(buf)
+        writer.writerow(["كود الموظف", "اسم الموظف", "الفرع", "النوع", "الحالة", "التوقيت الرسمي (UTC)", "المسافة", "تطابق الوجه %"])
+        for l in logs:
+            writer.writerow(
+                [
+                    l.employee.employee_code if l.employee else "",
+                    l.employee.full_name if l.employee else "",
+                    l.branch.name if l.branch else "",
+                    "حضور" if l.punch_type == "CHECK_IN" else "انصراف",
+                    "مقبول" if l.status == "APPROVED" else "مرفوض",
+                    _iso_utc(l.server_timestamp) or "",
+                    round(l.distance_to_branch_meters, 1) if l.distance_to_branch_meters is not None else "",
+                    round(l.face_similarity_score * 100, 1) if l.face_similarity_score is not None else "",
+                ]
+            )
+        buf.seek(0)
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="WalaaHR_Attendance_{stamp}.csv"'},
         )
 
-    buf.seek(0)
-    filename = f"attendance_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.csv"
+    xlsx_bytes = build_attendance_excel_workbook(
+        logs=logs,
+        company_name=settings.COMPANY_NAME,
+        date_from=date_from,
+        date_to=date_to,
+        tz_offset_hours=tz_offset,
+        work_start_time=work_start,
+        late_grace_minutes=late_grace,
+    )
     return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="WalaaHR_Attendance_{stamp}.xlsx"'},
     )
 
 

@@ -234,8 +234,18 @@ def test_happy_path_punch_in_and_check_out_with_duplicate_guard(setup_database):
     assert res_out["success"] is True
     assert res_out["telemetry_details"]["qr_verified"] is True
 
-    # 5. CSV export works for authenticated admin
-    csv_res = client.get("/api/v1/admin/reports/export", headers=headers)
+    # 5. Executive 3-sheet Excel (.xlsx) report & CSV export both work for authenticated admin
+    from openpyxl import load_workbook
+    xlsx_res = client.get("/api/v1/admin/reports/export", headers=headers)
+    assert xlsx_res.status_code == 200
+    assert "spreadsheetml.sheet" in xlsx_res.headers["content-type"]
+    wb = load_workbook(io.BytesIO(xlsx_res.content))
+    assert len(wb.sheetnames) == 3
+    ws_daily = wb.worksheets[0]
+    assert ws_daily["D7"].value == "Ahmed Mostafa"
+    assert ws_daily["L7"].value == "حضور مكتمل"
+
+    csv_res = client.get("/api/v1/admin/reports/export?format=csv", headers=headers)
     assert csv_res.status_code == 200
     assert "Ahmed Mostafa" in csv_res.text
 

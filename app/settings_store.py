@@ -14,6 +14,9 @@ DEFAULT_RUNTIME_SETTINGS: Dict[str, Any] = {
     "REQUIRE_SERVER_FACE_AI": settings.REQUIRE_SERVER_FACE_AI,
     "PREVENT_DUPLICATE_PUNCH": settings.PREVENT_DUPLICATE_PUNCH,
     "QR_ROTATION_SECONDS": settings.QR_ROTATION_SECONDS,
+    "TIMEZONE_OFFSET_HOURS": 2,
+    "WORK_START_TIME": "09:00",
+    "LATE_GRACE_MINUTES": 15,
 }
 
 
@@ -45,6 +48,9 @@ def update_runtime_settings(db: Session, updates: Dict[str, Any]) -> Dict[str, A
         "REQUIRE_SERVER_FACE_AI": bool,
         "PREVENT_DUPLICATE_PUNCH": bool,
         "QR_ROTATION_SECONDS": int,
+        "TIMEZONE_OFFSET_HOURS": int,
+        "WORK_START_TIME": str,
+        "LATE_GRACE_MINUTES": int,
     }
     for key, raw_val in updates.items():
         if key not in type_casters:
@@ -58,4 +64,3 @@ def update_runtime_settings(db: Session, updates: Dict[str, Any]) -> Dict[str, A
             db.add(SystemSetting(key=key, value=val))
     db.commit()
     return get_runtime_settings(db)
-
