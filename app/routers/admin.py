@@ -327,12 +327,29 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/employees", response_model=List[EmployeeResponse])
+@router.get("/employees")
 def list_employees(include_inactive: bool = False, db: Session = Depends(get_db)):
-    q = db.query(Employee)
+    q = db.query(Employee).options(joinedload(Employee.bound_device))
     if not include_inactive:
         q = q.filter(Employee.is_active == True)
-    return q.order_by(Employee.created_at.desc()).all()
+    emps = q.order_by(Employee.created_at.desc()).all()
+    return [
+        {
+            "id": e.id,
+            "employee_code": e.employee_code,
+            "full_name": e.full_name,
+            "email": e.email,
+            "phone": e.phone,
+            "department": e.department,
+            "bound_device_id": e.bound_device_id,
+            "bound_device_model": e.bound_device.device_model if e.bound_device else None,
+            "bound_device_os": f"{e.bound_device.os_name} {e.bound_device.os_version}" if e.bound_device else None,
+            "is_face_enrolled": e.is_face_enrolled,
+            "face_model_version": e.face_model_version,
+            "is_active": e.is_active,
+        }
+        for e in emps
+    ]
 
 
 @router.delete("/employees/{employee_id}")
@@ -452,9 +469,36 @@ def register_and_bind_device(payload: DeviceRegisterRequest, db: Session = Depen
     return device
 
 
-@router.get("/devices", response_model=List[DeviceResponse])
+@router.get("/devices")
 def list_devices(db: Session = Depends(get_db)):
-    return db.query(Device).order_by(Device.registered_at.desc()).all()
+    devices = (
+        db.query(Device)
+        .options(joinedload(Device.employees))
+        .order_by(Device.registered_at.desc())
+        .all()
+    )
+    result = []
+    for d in devices:
+        active_emp = next((e for e in (d.employees or []) if e.is_active), None)
+        result.append(
+            {
+                "id": d.id,
+                "device_fingerprint": d.device_fingerprint,
+                "device_model": d.device_model,
+                "os_name": d.os_name,
+                "os_version": d.os_version,
+                "is_trusted": d.is_trusted,
+                "is_blocked": d.is_blocked,
+                "blocked_reason": d.blocked_reason,
+                "registered_at": _iso_utc(d.registered_at),
+                "last_seen_at": _iso_utc(d.last_seen_at),
+                "employee_id": active_emp.id if active_emp else None,
+                "employee_code": active_emp.employee_code if active_emp else None,
+                "employee_name": active_emp.full_name if active_emp else None,
+                "employee_department": active_emp.department if active_emp else None,
+            }
+        )
+    return result
 
 
 @router.post("/devices/{device_id}/toggle-block")
