@@ -1,9 +1,21 @@
-name: Build Android APK
+name: Build Production Android APK & AAB
 
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'flutter_app/**'
+      - '.github/workflows/build-apk.yml'
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Production HTTPS API URL (e.g. https://attendance.yourcompany.com)'
+        required: true
+        default: 'https://attendance.yourcompany.com'
+      app_id:
+        description: 'Unique Android Application ID (e.g. com.yourcompany.attendance)'
+        required: false
+        default: 'com.yourcompany.attendance'
 
 permissions:
   contents: write
@@ -24,38 +36,58 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.x'
+          flutter-version: '3.24.x'
           channel: 'stable'
 
-      - name: Generate Fresh Android V2 Scaffolding
+      - name: Generate Clean Android Scaffolding
         working-directory: ./flutter_app
+        env:
+          APP_ID: ${{ github.event.inputs.app_id || vars.ANDROID_APP_ID || 'com.yourcompany.attendance' }}
         run: |
+          ORG_PREFIX="${APP_ID%.*}"
+          PROJ_NAME="${APP_ID##*.}"
           rm -rf android
-          flutter create --platforms=android --org com.company --project-name attendance_mobile_app .
+          flutter create --platforms=android --org "$ORG_PREFIX" --project-name attendance_mobile_app .
           sed -i '/<application/i \    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-          sed -i 's/compileSdkVersion .*/compileSdkVersion 34/' android/app/build.gradle || true
+          sed -i 's/android:label="[^"]*"/android:label="الحضور الذكي"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/minSdk = .*/minSdk = 21/' android/app/build.gradle || true
           sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle || true
-          sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.9.22"/' android/settings.gradle || true
-          sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.22"/' android/build.gradle || true
 
-      - name: Get Dependencies
+      - name: Configure Optional Release Signing Keystore
         working-directory: ./flutter_app
-        run: flutter pub get
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          cat <<EOF > android/key.properties
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
 
-      - name: Build Release APK
+      - name: Get Dependencies & Build Release APK
         working-directory: ./flutter_app
-        run: flutter build apk --release
+        env:
+          API_URL: ${{ github.event.inputs.api_url || vars.PRODUCTION_API_URL || 'https://attendance.yourcompany.com' }}
+        run: |
+          flutter pub get
+          flutter build apk --release --dart-define=API_URL="$API_URL"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: attendance-app-release
+          name: attendance-app-v2-${{ github.run_number }}
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Publish to GitHub Releases
+      - name: Publish Versioned GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: "Attendance System APK v1.0.0"
-          body: "Direct download of the Anti-Cheat Biometric and Geofenced Attendance Android Application."
+          tag_name: v2.0.${{ github.run_number }}
+          name: "Attendance System APK v2.0.${{ github.run_number }}"
+          body: "Production Release APK for the Anti-Cheat Biometric Attendance System (Server-Side AI + Anti-Mock GPS + QR)."
           files: flutter_app/build/app/outputs/flutter-apk/app-release.apk

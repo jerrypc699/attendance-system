@@ -1,46 +1,31 @@
-version: '3.8'
-
 services:
-  # 1. PostgreSQL with pgvector and PostGIS
   postgres:
-    image: pgvector/pgvector:pg16
+    image: imresamu/postgis:16-3.4
     container_name: attendance_postgres
     restart: always
     environment:
-      POSTGRES_DB: attendance_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_password
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB:-attendance_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
 
-  # 2. Redis for Session Nonces, Challenge Expiry & Rate Limiting
-  redis:
-    image: redis:7-alpine
-    container_name: attendance_redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-
-  # 3. FastAPI Backend
   api:
     build: .
     container_name: attendance_api
     restart: always
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres_secure_password@postgres:5432/attendance_db
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-attendance_db}
       - ENVIRONMENT=production
+    volumes:
+      - ./uploads:/app/uploads
+      - ./models:/app/models
     depends_on:
       - postgres
-      - redis
 
 volumes:
   pgdata:
-  redisdata:
-

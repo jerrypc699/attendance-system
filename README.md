@@ -1,108 +1,73 @@
-# Anti-Cheat Mobile Attendance System 🛡️
-### نظام حضور وانصراف ذكي غير قابل للتخطي ببصمة الوجه والموقع الجغرافي
+# Anti-Cheat Biometric Attendance System v2.0 🛡️
+### نظام حضور وانصراف ذكي للشركات (Android + iPhone PWA + Windows Server)
 
 ---
 
-## 1. قاعدة البيانات المناسبة ولماذا تم اختيارها؟
+## المميزات الأمنية المفعّلة في النسخة 2.0 (Production-Ready)
 
-قاعدة البيانات المعتمدة للنظام هي: **PostgreSQL 16+** مع إضافتي:
-1. **`pgvector`**: لتخزين متجهات بصمة الوجه عالية الأبعاد (512-dimension Feature Vectors) والبحث الفوري عن التشابه عبر مؤشرات **HNSW** و **Cosine Similarity** (`<=>`).
-2. **`PostGIS`**: لحسابات الموقع الجغرافي والنطاقات المكانية (Geofencing) بأعلى دقة رياضية عبر دوال مثل `ST_DWithin`.
-3. **`Redis`** (مساعد في الذاكرة): لإدارة رموز التحدي المؤقتة (Challenge Nonce TTL = 40s) ومنع هجمات التكرار (Replay Attacks) ومعدل الطلبات.
-
-### مقارنة مع البدائل:
-| المعيار | PostgreSQL (مع pgvector & PostGIS) | MongoDB | MySQL العادية |
-| :--- | :--- | :--- | :--- |
-| **تخزين ومطابقة بصمات الوجه (Vector Search)** | ⭐️⭐️⭐️⭐️⭐️ عبر `pgvector` و `HNSW` | ⭐️⭐️⭐️ عبر Atlas Search (محدود محلياً) | ❌ غير مدعوم أصلياً |
-| **دقة الجيوفينس وحساب المسافات الجغرافية** | ⭐️⭐️⭐️⭐️⭐️ عبر `PostGIS` فائق الدقة | ⭐️⭐️⭐️ تقريبي (2D Spherical) | ⭐️⭐️ أساسي وبطيء في المعالجة |
-| **موثوقية سجلات الحضور والرواتب (ACID)** | ⭐️⭐️⭐️⭐️⭐️ دقة مالية وقانونية تامة | ⭐️⭐️⭐️ Document-based | ⭐️⭐️⭐️⭐️ جيدة ولكن تنقصها أدوات الذكاء الاصطناعي |
-
----
-
-## 2. طبقات الحماية الخمس (منع التخطي بنسبة 99.9%)
-
-```mermaid
-flowchart TD
-    A["تطبيق الهاتف (Flutter)"] --> B["1. طلب تحدي أمني مؤقت (Nonce + Random Actions)"]
-    B --> C["2. كشف الموقع الوهمي وسلامة الجهاز (Mock GPS & Device Check)"]
-    C --> D["3. التقاط الوجه المباشر واختبار الحيوية (Active & Passive Liveness)"]
-    D --> E["4. إرسال الحزمة المشفرة إلى السيرفر"]
-    E --> F{"فحص السيرفر الصارم"}
-    F -- "أي شك أو تلاعب" --> G["رفض الحضور + تسجيل تنبيه اختراق (FraudAlert)"]
-    F -- "مطابقة جميع الطبقات" --> H["اعتماد الحضور بتوقيت السيرفر الرسمي (Approved)"]
-```
-
-1. **كشف المواقع الوهمية (Anti-Mock GPS & Geofencing):**
-   * كشف وتجريم تفعيل `isMocked` من أندرويد ورفض التطبيقات الخبيثة مثل Fake GPS.
-   * حساب المسافة الدقيقة بين الموظف وإحداثيات المقر عبر معادلة Haversine.
-2. **المرساة الفيزيائية (Physical Anchors):**
-   * مطابقة عنوان الـ MAC (BSSID) لراوتر الشركة أو إشارة جهاز **BLE Beacon** داخل المكتب لمنع التواجد الوهمي.
-3. **حماية بصمة الوجه وكشف الحيوية (Liveness & 1:1 Face Matching):**
-   * تحدي حركي عشوائي يتغير كل مرة (رمش، حركة رأس، ابتسامة).
-   * فحص الحيوية السلبي لكشف الصور والورق والشاشات (Passive Liveness Score >= 0.70).
-   * مطابقة متجهات الوجه (Cosine Similarity >= 0.82) ضد بصمة الموظف المسجلة في السيرفر.
-4. **ربط الحساب بجهاز واحد (Hardware Device Binding):**
-   * بصمة مشفرة للجهاز (SHA-256 Hardware Fingerprint) محفوظة في Secure Storage / KeyStore.
-   * منع أي موظف من تسجيل الحضور نيابة عن زميله من هاتف آخر.
-5. **ساعة السيرفر ومنع إعادة الإرسال (Server-side NTP & Replay Protection):**
-   * اعتماد توقيت السيرفر فقط وتجاهل ساعة هاتف الموظف تماماً.
-   * إبطال رمز الـ Nonce فور استخدامه لمنع إعادة إرسال الطلب (Replay Attack).
+1. **توثيق إداري كامل (JWT + bcrypt):**
+   - لوحة التحكم (`/dashboard`) وجميع مسارات `/api/v1/admin/*` محمية بتسجيل دخول الأدمن وتغيير كلمة المرور.
+   - تم إزالة أي تسريب لمتجهات الوجه أو قوائم الموظفين، وتطبيق Soft Delete للحفاظ على سجلات الرواتب والتدقيق.
+2. **ذكاء اصطناعي حقيقي للوجه والحيوية على السيرفر (Server-Side AI):**
+   - محرك **OpenCV YuNet** لكشف الوجه و 5 نقاط ملامح، ومحرك **SFace ONNX (128-d)** لمطابقة الهوية على السيرفر مباشرة (لا يثق أبداً في متجهات أو درجات حيوية مرسلة من الهاتف).
+   - التقاط **3 إطارات متتالية** أثناء تنفيذ الحركة العشوائية لمنع الصور الثابتة وفحص الحيوية السلبي (حدة الصورة، الانعكاسات، مواريه الشاشات).
+3. **حماية التواجد الفيزيائي للآيفون والأندرويد (Android & iPhone):**
+   - **Geofencing GPS** حقيقي + كشف Fake GPS (`isMocked`) على أندرويد.
+   - **IP واي فاي الشركة (Office Public IP Whitelist)** عبر ترويسة `CF-Connecting-IP` (يعمل على iPhone PWA و Android).
+   - **شاشة QR متغير كل 20 ثانية (`/kiosk/{branch_code}`)** موقّع بـ HMAC لمدخل الشركة.
+4. **ربط جهاز واحد لكل موظف + كود تفعيل من الـ HR:**
+   - يضيف الأدمن الموظف فيظهر له **كود تفعيل أحادي الاستخدام (`ACT-XXXXXX`)** + رسالة جاهزة لواتساب.
+   - عند التفعيل يحصل هاتف الموظف على مفتاح سري (`device_token`) محفوظ محلياً لمنع البصم بالنيابة أو انتحال الجهاز.
+5. **تخزين احترافي وتقارير ونسخ احتياطي:**
+   - حفظ صور البصمات كملفات JPEG مضغوطة في `uploads/snapshots/` محمية بتوثيق الأدمن بدلاً من تضخيم قاعدة البيانات.
+   - تصدير تقارير الحضور بصيغة Excel CSV (بالعربية) من لوحة التحكم.
+   - تشغيل دائم كـ Windows Service + نسخ احتياطي يومي ساخن لقاعدة البيانات والصور في `backups/`.
 
 ---
 
-## 3. هيكل المشروع المُنجز
+## التشغيل أونلاين بـ HTTPS من هذا السيرفر (Windows Server 2019)
 
-```text
-attendance-system/
-├── app/
-│   ├── config.py                 # إعدادات النظام وعتبات الأمان
-│   ├── database.py               # ربط قاعدة البيانات
-│   ├── models.py                 # جداول الـ ORM (Branches, Employees, Devices, Logs, FraudAlerts)
-│   ├── schemas.py                # نماذج التحقق Pydantic
-│   ├── security/
-│   │   ├── geo_verifier.py       # محرك فحص الموقع والمرساة الفيزيائية
-│   │   ├── device_verifier.py    # محرك التحقق من ارتباط الجهاز
-│   │   └── biometric_verifier.py # محرك مطابقة الوجه واختبار الحيوية
-│   ├── routers/
-│   │   ├── attendance.py         # واجهات تسجيل الحضور وطلب التحدي
-│   │   └── admin.py              # واجهات الإدارة وتسجيل الموظفين والفروع
-│   └── main.py                   # نقطة انطلاق تطبيق FastAPI
-├── tests/
-│   └── test_anti_cheat_pipeline.py # 6 اختبارات أوتوماتيكية تثبت صد جميع محاولات التلاعب
-├── mobile_starter/
-│   ├── security_checker.dart     # كود فلاتر لفحص الروت والموقع الحقيقي والـ BSSID
-│   └── attendance_service.dart   # كود فلاتر للتواصل المشفر مع السيرفر
-├── schema.sql                    # كود إنشاء جداول PostgreSQL مع pgvector و PostGIS
-├── docker-compose.yml            # بيئة تشغيل سحابية متكاملة بضغطة زر
-└── requirements.txt
-```
+### 1. الخدمات المثبّتة تلقائياً
+- **`AttendanceSystem-API`:** تعمل في الخلفية 24/7 وتبدأ تلقائياً مع تشغيل السيرفر على المنفذ `8000`.
+- **`AttendanceSystem-DailyBackup`:** تأخذ نسخة احتياطية يومية الساعة 2:00 صباحاً داخل `backups/`.
+- للتثبيت أو إعادة التثبيت في أي وقت (كـ Administrator):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\install_windows_services.ps1
+  ```
 
----
+### 2. ربط السيرفر بدومين الشركة بـ HTTPS دائم (Cloudflare Tunnel — مجاني)
+1. اربط دومين الشركة على حسابك المجاني في Cloudflare.
+2. نفّذ الأمر التالي كـ Administrator:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\setup_cloudflare_tunnel.ps1 -DomainName attendance.yourcompany.com
+   ```
+3. حدّث `.env` بالقيم:
+   ```env
+   ALLOWED_ORIGINS=https://attendance.yourcompany.com
+   PUBLIC_BASE_URL=https://attendance.yourcompany.com
+   ```
+   ثم أعد تشغيل المهمة `AttendanceSystem-API`.
 
-## 4. كيفية التشغيل والاختبار
-
-### تشغيل الاختبارات الآلية (Automated Tests):
-تم إعداد واختبار 6 سيناريوهات أمنية تثبت منع التخطي:
+### 3. تجربة فورية بـ HTTPS بدون دومين الآن (Quick Tunnel)
 ```powershell
-cd C:\Users\Administrator\.gemini\antigravity\scratch\attendance-system
+powershell -ExecutionPolicy Bypass -File .\scripts\start_quick_tunnel.ps1
+```
+افتح الرابط الناتج `https://....trycloudflare.com/mobile` على iPhone أو Android لتجربة الكاميرا والـ GPS فوراً.
+
+---
+
+## توزيع التطبيق على الموظفين
+
+- **لموظفي iPhone و Android (فوراً ومجاناً):**
+  افتح رابط `https://attendance.yourcompany.com/mobile` ->
+  - **iPhone (Safari):** اضغط مشاركة `⬆️` ثم **إضافة إلى الشاشة الرئيسية (Add to Home Screen)**.
+  - **Android (Chrome):** اضغط زر **تثبيت** أو حمّل تطبيق Flutter APK.
+- **بناء نسخة Android APK الرسمية تلقائياً:**
+  من GitHub Actions -> شغّل Workflow **`Build Production Android APK & AAB`** وأدخل رابط الدومين `https://attendance.yourcompany.com` في `api_url` ليخرج ملف `app-release.apk` جاهزاً في **GitHub Releases**.
+
+---
+
+## تشغيل الاختبارات الآلية
+```powershell
 .\venv\Scripts\python -m pytest -v tests
 ```
-**النتيجة**:
-* `test_happy_path_punch_in`: نجاح الحضور الشرعي.
-* `test_cheat_attempt_mock_gps`: صد وإفشال محاولة Fake GPS بنجاح.
-* `test_cheat_attempt_out_of_geofence`: صد الموظف المتواجد خارج نطاق الشركة.
-* `test_cheat_attempt_face_spoof_low_liveness`: كشف استخدام صورة أو شاشة بدلاً من الوجه الحي.
-* `test_cheat_attempt_device_mismatch`: صد محاولة تسجيل موظف لحساب زميله من هاتف مختلف.
-* `test_cheat_attempt_replay_attack`: صد محاولة إعادة إرسال نفس الطلب بعد استهلاكه.
-
-### تشغيل خادم التطبيق (FastAPI):
-```powershell
-.\venv\Scripts\uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-توثيق الواجهات التفاعلي سيكون متاحاً مباشرة على: `http://localhost:8000/docs`
-
-### التشغيل عبر Docker Compose (الإنتاج):
-```bash
-docker compose up -d
-```
-

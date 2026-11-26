@@ -1,14 +1,17 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>لوحة التحكم الشاملة | نظام الحضور والانصراف الذكي</title>
-    <!-- Tailwind CSS -->
+    <title>لوحة التحكم الإدارية | نظام الحضور والانصراف الذكي</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Cairo', sans-serif; }
+        body {
+            font-family: 'Cairo', sans-serif;
+        }
+
         .tab-btn.active {
             background-color: #4338ca;
             color: #ffffff;
@@ -16,610 +19,713 @@
         }
     </style>
 </head>
+
 <body class="bg-slate-100 text-slate-800 min-h-screen">
 
-    <!-- Top Navigation Bar -->
-    <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-50 border-b border-slate-800">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-xl shadow-md">
-                    🛡️
+    <!-- ==================== ADMIN LOGIN SCREEN ==================== -->
+    <div id="login-screen" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4">
+        <div
+            class="bg-slate-900 border border-indigo-800/60 rounded-3xl max-w-sm w-full p-7 shadow-2xl space-y-5 text-white">
+            <div class="text-center space-y-1">
+                <img src="/icons/icon-192.png" alt="Logo" class="w-16 h-16 rounded-2xl mx-auto shadow-lg mb-2">
+                <h1 class="text-xl font-black">تسجيل دخول الإدارة</h1>
+                <p class="text-xs text-slate-400">لوحة التحكم المحمية لنظام الحضور والانصراف</p>
+            </div>
+            <form onsubmit="submitAdminLogin(event)" class="space-y-3.5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">اسم المستخدم</label>
+                    <input id="login-user" type="text" required autocomplete="username" placeholder="admin"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
                 </div>
                 <div>
-                    <h1 class="text-lg font-bold">لوحة التحكم المركزية | نظام الحضور المقاوم للتلاعب</h1>
-                    <p class="text-xs text-slate-400">تحكم كامل في الفروع، الموظفين، بصمات الوجه، وعتبات الأمان</p>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">كلمة المرور</label>
+                    <input id="login-pass" type="password" required autocomplete="current-password"
+                        placeholder="••••••••"
+                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
                 </div>
-            </div>
-            
-            <div class="flex items-center gap-3">
-                <a href="/download-apk" class="text-xs bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg border border-indigo-400 text-white font-bold transition flex items-center gap-1 shadow">
-                    <span>📲</span>
-                    <span>تحميل تطبيق APK</span>
-                </a>
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    النظام نشط ومحمي
-                </span>
-                <a href="/docs" target="_blank" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1">
-                    <span>⚡ لوحة الـ API</span>
-                </a>
+                <div id="login-error"
+                    class="hidden text-xs text-rose-300 bg-rose-950/70 border border-rose-800 p-2.5 rounded-xl text-center font-bold">
+                </div>
+                <button type="submit" id="btn-login"
+                    class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl text-sm font-black shadow-lg transition">
+                    🔐 دخول لوحة التحكم
+                </button>
+            </form>
+            <div class="text-center pt-2 border-t border-slate-800">
+                <a href="/mobile" class="text-xs text-indigo-400 hover:underline font-bold">📱 الذهاب لتطبيق الموظفين
+                    (PWA)</a>
             </div>
         </div>
+    </div>
 
-        <!-- Navigation Tabs -->
-        <div class="max-w-7xl mx-auto px-4 mt-2 flex flex-wrap gap-2 border-t border-slate-800/80 pt-2 pb-2">
-            <button onclick="switchTab('tab-simulator')" id="btn-tab-simulator" class="tab-btn active px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
-                <span>🎯 محاكي البصمة المباشر</span>
-            </button>
-            <button onclick="switchTab('tab-employees')" id="btn-tab-employees" class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5">
-                <span>👥 الموظفين والوجوه (<span id="count-emp-tab">0</span>)</span>
-            </button>
-            <button onclick="switchTab('tab-branches')" id="btn-tab-branches" class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5">
-                <span>🏢 الفروع واللوكيشن (<span id="count-branch-tab">0</span>)</span>
-            </button>
-            <button onclick="switchTab('tab-devices')" id="btn-tab-devices" class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5">
-                <span>📱 أجهزة الهواتف المعتمدة</span>
-            </button>
-            <button onclick="switchTab('tab-logs')" id="btn-tab-logs" class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5">
-                <span>📋 السجلات ومحاولات الغش</span>
-            </button>
-            <button onclick="switchTab('tab-settings')" id="btn-tab-settings" class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5">
-                <span>⚙️ إعدادات الحماية الصارمة</span>
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Container -->
-    <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
-
-        <!-- Notification Toast -->
-        <div id="toast" class="hidden fixed bottom-6 left-6 z-50 px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold flex items-center gap-2 transition-all"></div>
-
-        <!-- ============================================================== -->
-        <!-- TAB 1: LIVE SIMULATOR & SECURITY TESTING LAB                   -->
-        <!-- ============================================================== -->
-        <section id="tab-simulator" class="space-y-6">
-            
-            <!-- Quick Stat Banner -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                    <p class="text-xs text-slate-500 font-semibold mb-1">الموظفين المسجلين</p>
-                    <h3 id="stat-emp-count" class="text-2xl font-black text-slate-800">--</h3>
-                </div>
-                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                    <p class="text-xs text-slate-500 font-semibold mb-1">الفروع المعتمدة</p>
-                    <h3 id="stat-branch-count" class="text-2xl font-black text-slate-800">--</h3>
-                </div>
-                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                    <p class="text-xs text-slate-500 font-semibold mb-1">حالات الحضور المعتمدة</p>
-                    <h3 id="stat-approved-count" class="text-2xl font-black text-emerald-600">--</h3>
-                </div>
-                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                    <p class="text-xs text-slate-500 font-semibold mb-1">محاولات التلاعب المكشوفة</p>
-                    <h3 id="stat-fraud-count" class="text-2xl font-black text-rose-600">--</h3>
-                </div>
-            </div>
-
-            <!-- Simulation Controls Box -->
-            <div class="bg-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-800">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+    <!-- ==================== MAIN AUTHENTICATED APP ==================== -->
+    <div id="app-shell" class="hidden">
+        <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-40 border-b border-slate-800">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <div class="flex items-center gap-3">
+                    <img src="/icons/icon-192.png" alt="Logo" class="w-10 h-10 rounded-xl shadow">
                     <div>
-                        <span class="px-3 py-1 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-full text-xs font-bold inline-block mb-2">
-                            مختبر اختبار الأمان المباشر
-                        </span>
-                        <h2 class="text-2xl font-black">اختبر تسجيل الحضور وحاول اختراق النظام!</h2>
-                        <p class="text-xs text-slate-400 mt-1">اختر الموظف واضغط على أي تجربة لمشاهدة كيف يفرق النظام بين البصمة الشرعية ومحاولات الغش.</p>
-                    </div>
-                    
-                    <div class="flex items-center gap-2 bg-slate-800 p-2 rounded-2xl border border-slate-700">
-                        <label class="text-xs text-slate-300 font-semibold">الموظف للاختبار:</label>
-                        <select id="sim-employee-select" class="bg-slate-900 text-white text-xs font-bold rounded-xl px-3 py-1.5 border border-slate-600 focus:outline-none">
-                            <option value="EMP-2001">جاري التحميل...</option>
-                        </select>
+                        <h1 class="text-base font-bold">لوحة التحكم الإدارية | نظام الحضور الذكي v2</h1>
+                        <p class="text-[11px] text-slate-400">
+                            بصمة الوجه AI (YuNet+SFace) • <span id="admin-welcome"
+                                class="text-indigo-300 font-bold">الأدمن</span> • IP الحالي: <span
+                                id="detected-ip-badge" class="font-mono text-emerald-400">--</span>
+                        </p>
                     </div>
                 </div>
-
-                <!-- Simulation Action Buttons -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <!-- Approved Test -->
-                    <button onclick="executeTest('LEGIT')" class="bg-emerald-600 hover:bg-emerald-500 text-white p-4 rounded-2xl font-bold text-xs transition shadow-lg shadow-emerald-900/30 flex flex-col gap-1 items-start text-right">
-                        <span class="text-lg">✅ بصمة شرعية مقبولة</span>
-                        <span class="text-[11px] font-normal text-emerald-100">وجه حقيقي + داخل الفرع + الهاتف المسجل</span>
-                    </button>
-
-                    <!-- Fake GPS Attack -->
-                    <button onclick="executeTest('FAKE_GPS')" class="bg-rose-950/70 hover:bg-rose-900/80 border border-rose-700/60 text-rose-200 p-4 rounded-2xl font-bold text-xs transition flex flex-col gap-1 items-start text-right">
-                        <span class="text-lg text-rose-400">🚨 محاولة Fake GPS</span>
-                        <span class="text-[11px] font-normal text-slate-300">محاكاة إحداثيات وهمية من تطبيقات الغش</span>
-                    </button>
-
-                    <!-- Face Spoof Attack -->
-                    <button onclick="executeTest('FACE_SPOOF')" class="bg-amber-950/70 hover:bg-amber-900/80 border border-amber-700/60 text-amber-200 p-4 rounded-2xl font-bold text-xs transition flex flex-col gap-1 items-start text-right">
-                        <span class="text-lg text-amber-400">🎭 محاولة تزييف الوجه</span>
-                        <span class="text-[11px] font-normal text-slate-300">توجيه صورة مطبوعة أو فيديو على شاشة</span>
-                    </button>
-
-                    <!-- Unauthorized Device -->
-                    <button onclick="executeTest('WRONG_DEVICE')" class="bg-purple-950/70 hover:bg-purple-900/80 border border-purple-700/60 text-purple-200 p-4 rounded-2xl font-bold text-xs transition flex flex-col gap-1 items-start text-right">
-                        <span class="text-lg text-purple-400">📱 هاتف زميل آخر</span>
-                        <span class="text-[11px] font-normal text-slate-300">محاولة موظف البصم نيابة عن زميله</span>
-                    </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="/mobile" target="_blank"
+                        class="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg font-bold transition">📱
+                        تطبيق الموظفين</a>
+                    <button onclick="openModal('modal-change-password')"
+                        class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 font-bold">🔑
+                        كلمة المرور</button>
+                    <button onclick="logoutAdmin()"
+                        class="text-xs bg-rose-900/70 hover:bg-rose-800 px-3 py-1.5 rounded-lg border border-rose-700 font-bold">خروج</button>
                 </div>
-
-                <!-- Simulation Output Box -->
-                <div id="sim-output" class="hidden mt-6 p-5 rounded-2xl text-xs leading-relaxed border transition-all"></div>
             </div>
 
-            <!-- Recent Activity Split -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Recent Approved Punches -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <div class="flex justify-between items-center mb-3">
-                        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                            آخر بصمات الحضور المعتمدة
-                        </h4>
-                        <button onclick="loadData()" class="text-xs text-indigo-600 hover:underline">تحديث ⟳</button>
+            <div class="max-w-7xl mx-auto px-4 mt-1 flex flex-wrap gap-2 border-t border-slate-800/80 pt-2 pb-2">
+                <button onclick="switchTab('tab-overview')" id="btn-tab-overview"
+                    class="tab-btn active px-4 py-1.5 rounded-xl text-xs font-bold transition">📊 الملخص اليومي</button>
+                <button onclick="switchTab('tab-employees')" id="btn-tab-employees"
+                    class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">👥
+                    الموظفين (<span id="count-emp-tab">0</span>)</button>
+                <button onclick="switchTab('tab-branches')" id="btn-tab-branches"
+                    class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">🏢
+                    الفروع والـ QR (<span id="count-branch-tab">0</span>)</button>
+                <button onclick="switchTab('tab-devices')" id="btn-tab-devices"
+                    class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">📱
+                    الهواتف المربوطة</button>
+                <button onclick="switchTab('tab-logs')" id="btn-tab-logs"
+                    class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">📋
+                    السجلات والتقارير</button>
+                <button onclick="switchTab('tab-settings')" id="btn-tab-settings"
+                    class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">⚙️
+                    إعدادات الأمان</button>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+            <div id="toast"
+                class="hidden fixed bottom-6 left-6 z-50 px-5 py-3 rounded-2xl shadow-2xl text-xs font-bold"></div>
+
+            <!-- TAB 1: OVERVIEW -->
+            <section id="tab-overview" class="space-y-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-xs text-slate-500 font-semibold mb-1">الموظفين النشطين</p>
+                        <h3 id="stat-emp-count" class="text-2xl font-black text-slate-800">--</h3>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-right text-xs">
-                            <thead class="bg-slate-50 text-slate-400 border-b border-slate-100">
-                                <tr>
-                                    <th class="p-2.5">الصورة</th>
-                                    <th class="p-2.5">الموظف</th>
-                                    <th class="p-2.5">النوع</th>
-                                    <th class="p-2.5">المسافة</th>
-                                    <th class="p-2.5">الوقت الرسمي</th>
-                                </tr>
-                            </thead>
-                            <tbody id="quick-logs-body" class="divide-y divide-slate-100">
-                                <tr><td colspan="5" class="p-4 text-center text-slate-400">جاري التحميل...</td></tr>
-                            </tbody>
-                        </table>
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-xs text-slate-500 font-semibold mb-1">الفروع المفعّلة</p>
+                        <h3 id="stat-branch-count" class="text-2xl font-black text-slate-800">--</h3>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-xs text-slate-500 font-semibold mb-1">بصمات معتمدة</p>
+                        <h3 id="stat-approved-count" class="text-2xl font-black text-emerald-600">--</h3>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                        <p class="text-xs text-slate-500 font-semibold mb-1">محاولات تلاعب مرصودة</p>
+                        <h3 id="stat-fraud-count" class="text-2xl font-black text-rose-600">--</h3>
                     </div>
                 </div>
 
-                <!-- Recent Fraud Alerts -->
-                <div class="bg-white rounded-2xl border border-rose-200 shadow-sm p-5">
-                    <div class="flex justify-between items-center mb-3">
-                        <h4 class="font-bold text-rose-800 text-sm flex items-center gap-1.5">
-                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
-                            آخر محاولات التلاعب المرفوضة
-                        </h4>
-                        <button onclick="loadData()" class="text-xs text-indigo-600 hover:underline">تحديث ⟳</button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-right text-xs">
-                            <thead class="bg-rose-50/50 text-rose-600 border-b border-rose-100">
-                                <tr>
-                                    <th class="p-2.5">نوع الهجمة</th>
-                                    <th class="p-2.5">السبب</th>
-                                    <th class="p-2.5">التوقيت</th>
-                                </tr>
-                            </thead>
-                            <tbody id="quick-frauds-body" class="divide-y divide-rose-50">
-                                <tr><td colspan="3" class="p-4 text-center text-slate-400">لا توجد محاولات تلاعب مسجلة.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-        </section>
-
-        <!-- ============================================================== -->
-        <!-- TAB 2: EMPLOYEES & FACE ENROLLMENT                             -->
-        <!-- ============================================================== -->
-        <section id="tab-employees" class="hidden space-y-6">
-            
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-900">سجل الموظفين وبصمات الوجه الرقمية</h2>
-                    <p class="text-xs text-slate-500">إضافة موظفين جدد، تسجيل بصمات وجوههم، وإدارة ارتباطات هواتفهم</p>
-                </div>
-                <button onclick="openModal('modal-add-employee')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow flex items-center gap-1.5">
-                    <span>+</span> إضافة موظف جديد
-                </button>
-            </div>
-
-            <!-- Employees Table -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-right text-xs">
-                        <thead class="bg-slate-50 text-slate-500 border-b border-slate-200">
-                            <tr>
-                                <th class="p-3.5">كود الموظف</th>
-                                <th class="p-3.5">الاسم بالكامل</th>
-                                <th class="p-3.5">البريد الإلكتروني</th>
-                                <th class="p-3.5">القسم</th>
-                                <th class="p-3.5">بصمة الوجه (512-d)</th>
-                                <th class="p-3.5">حالة الجهاز</th>
-                                <th class="p-3.5 text-center">إجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="employees-table-body" class="divide-y divide-slate-100">
-                            <tr><td colspan="7" class="p-6 text-center text-slate-400">جاري التحميل...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ============================================================== -->
-        <!-- TAB 3: BRANCHES & GEOFENCING                                  -->
-        <!-- ============================================================== -->
-        <section id="tab-branches" class="hidden space-y-6">
-            
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-900">إدارة الفروع ومحيط الحضور الجغرافي (Geofencing)</h2>
-                    <p class="text-xs text-slate-500">تحديد موقع المقرات، النطاق المسموح بالمتر، وشبكات الواي فاي التابعة للشركة</p>
-                </div>
-                <button onclick="openModal('modal-add-branch')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow flex items-center gap-1.5">
-                    <span>+</span> إضافة فرع جديد
-                </button>
-            </div>
-
-            <!-- Branches Table -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-right text-xs">
-                        <thead class="bg-slate-50 text-slate-500 border-b border-slate-200">
-                            <tr>
-                                <th class="p-3.5">اسم الفرع</th>
-                                <th class="p-3.5">الكود</th>
-                                <th class="p-3.5">إحداثيات GPS</th>
-                                <th class="p-3.5">النطاق المسموح</th>
-                                <th class="p-3.5">شبكات الواي فاي المقبولة (BSSID)</th>
-                                <th class="p-3.5 text-center">إجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody id="branches-table-body" class="divide-y divide-slate-100">
-                            <tr><td colspan="6" class="p-6 text-center text-slate-400">جاري التحميل...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ============================================================== -->
-        <!-- TAB 4: REGISTERED DEVICES                                      -->
-        <!-- ============================================================== -->
-        <section id="tab-devices" class="hidden space-y-6">
-            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <h2 class="text-lg font-bold text-slate-900 mb-1">أجهزة الهواتف المعتمدة (Hardware-Bound Devices)</h2>
-                <p class="text-xs text-slate-500">لكل موظف هاتف واحد فقط مسموح له بالبصم منه، ويمكنك حظر أي هاتف فوراً إذا اشتبهت في محاولة تلاعب.</p>
-            </div>
-
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-right text-xs">
-                        <thead class="bg-slate-50 text-slate-500 border-b border-slate-200">
-                            <tr>
-                                <th class="p-3.5">موديل الجهاز</th>
-                                <th class="p-3.5">نظام التشغيل</th>
-                                <th class="p-3.5">بصمة الجهاز المشفرة (Fingerprint)</th>
-                                <th class="p-3.5">حالة الثقة</th>
-                                <th class="p-3.5">تاريخ التسجيل</th>
-                                <th class="p-3.5 text-center">التحكم</th>
-                            </tr>
-                        </thead>
-                        <tbody id="devices-table-body" class="divide-y divide-slate-100">
-                            <tr><td colspan="6" class="p-6 text-center text-slate-400">جاري التحميل...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-
-        <!-- ============================================================== -->
-        <!-- TAB 5: LOGS & FRAUD AUDIT TRAIL                               -->
-        <!-- ============================================================== -->
-        <section id="tab-logs" class="hidden space-y-6">
-            
-            <!-- Clear Buttons -->
-            <div class="flex justify-between items-center">
-                <h2 class="text-lg font-bold text-slate-900">سجل العمليات الكامل ومسار التدقيق</h2>
-                <div class="flex gap-2">
-                    <button onclick="clearLogs()" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-xl font-bold transition">
-                        🗑️ مسح سجل الحضور للتجربة
-                    </button>
-                    <button onclick="clearFrauds()" class="text-xs bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-1.5 rounded-xl font-bold transition">
-                        🗑️ مسح سجل محاولات التلاعب
-                    </button>
-                </div>
-            </div>
-
-            <!-- Attendance Logs Full Table -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-4 bg-slate-50 border-b border-slate-200 font-bold text-sm">
-                    📋 سجل الحضور والانصراف (الناجح والمرفوض)
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-right text-xs">
-                        <thead class="bg-slate-50 text-slate-500 border-b border-slate-200">
-                            <tr>
-                                <th class="p-3 text-center">صورة البصمة الحية</th>
-                                <th class="p-3">الموظف</th>
-                                <th class="p-3">الفرع</th>
-                                <th class="p-3">النوع</th>
-                                <th class="p-3">الحالة</th>
-                                <th class="p-3">المسافة</th>
-                                <th class="p-3">تطابق الوجه</th>
-                                <th class="p-3">السبب (إذا تم الرفض)</th>
-                                <th class="p-3">التوقيت الرسمي</th>
-                            </tr>
-                        </thead>
-                        <tbody id="full-logs-body" class="divide-y divide-slate-100">
-                            <tr><td colspan="9" class="p-6 text-center text-slate-400">جاري التحميل...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Fraud Alerts Full Table -->
-            <div class="bg-white rounded-2xl border border-rose-200 shadow-sm overflow-hidden">
-                <div class="p-4 bg-rose-50 border-b border-rose-100 font-bold text-sm text-rose-900">
-                    🚨 سجل محاولات التلاعب والغش (Fraud Alerts)
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-right text-xs">
-                        <thead class="bg-rose-50/40 text-rose-600 border-b border-rose-100">
-                            <tr>
-                                <th class="p-3">نوع التلاعب</th>
-                                <th class="p-3">مستوى الخطر</th>
-                                <th class="p-3">تفاصيل المخالفة والأدلة</th>
-                                <th class="p-3">التوقيت</th>
-                            </tr>
-                        </thead>
-                        <tbody id="full-frauds-body" class="divide-y divide-rose-50">
-                            <tr><td colspan="4" class="p-6 text-center text-slate-400">لا توجد محاولات تلاعب مسجلة.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-        </section>
-
-        <!-- ============================================================== -->
-        <!-- TAB 6: SECURITY SETTINGS & THRESHOLDS                          -->
-        <!-- ============================================================== -->
-        <section id="tab-settings" class="hidden space-y-6">
-            
-            <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm max-w-2xl mx-auto space-y-6">
-                <div>
-                    <h2 class="text-xl font-black text-slate-900">إعدادات الحماية وعتبات الأمان</h2>
-                    <p class="text-xs text-slate-500 mt-1">يمكنك ضبط معايير قبول البصمة والموقع حسب سياسة شركتك</p>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">
-                            عتبة تطابق الوجه المطلوبة (Face Similarity Threshold)
-                        </label>
-                        <div class="flex items-center gap-3">
-                            <input id="set-face-threshold" type="range" min="0.5" max="0.95" step="0.01" class="w-full accent-indigo-600">
-                            <span id="set-face-threshold-val" class="text-sm font-black text-indigo-700 w-12 text-center">0.82</span>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="font-bold text-slate-800 text-sm">🟢 آخر بصمات الحضور والانصراف المعتمدة</h4>
+                            <button onclick="loadData()" class="text-xs text-indigo-600 font-bold hover:underline">تحديث
+                                ⟳</button>
                         </div>
-                        <p class="text-[11px] text-slate-400 mt-1">القيمة القياسية (0.82) تمنع تشابه الإخوة أو الوجوه المتقاربة.</p>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-slate-50 text-slate-400 border-b">
+                                    <tr>
+                                        <th class="p-2.5">الموظف</th>
+                                        <th class="p-2.5">النوع</th>
+                                        <th class="p-2.5">المسافة</th>
+                                        <th class="p-2.5">تطابق AI</th>
+                                        <th class="p-2.5">التوقيت</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="quick-logs-body" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
                     </div>
 
+                    <div class="bg-white rounded-2xl border border-rose-200 shadow-sm p-5">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="font-bold text-rose-800 text-sm">🚨 آخر تنبيهات الأمان والتلاعب</h4>
+                            <button onclick="loadData()" class="text-xs text-indigo-600 font-bold hover:underline">تحديث
+                                ⟳</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-rose-50/50 text-rose-600 border-b">
+                                    <tr>
+                                        <th class="p-2.5">النوع</th>
+                                        <th class="p-2.5">السبب</th>
+                                        <th class="p-2.5">IP</th>
+                                        <th class="p-2.5">التوقيت</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="quick-frauds-body" class="divide-y divide-rose-50"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: EMPLOYEES -->
+            <section id="tab-employees" class="hidden space-y-5">
+                <div
+                    class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">
-                            مدة صلاحية رمز التحدي الأمني بالثواني (Challenge Nonce TTL)
-                        </label>
-                        <input id="set-nonce-ttl" type="number" class="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-indigo-600">
-                        <p class="text-[11px] text-slate-400 mt-1">المدة التي تتاح للموظف لإتمام حركة الوجه والبصم (عادة 30 إلى 45 ثانية).</p>
+                        <h2 class="text-lg font-bold text-slate-900">إدارة الموظفين وتفعيل الهواتف</h2>
+                        <p class="text-xs text-slate-500">أضف الموظف ثم أرسل له رابط وكود التفعيل على واتساب ليسجّل وجهه
+                            ويربط موبايله لأول مرة.</p>
                     </div>
+                    <button onclick="openModal('modal-add-employee')"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow">+
+                        إضافة موظف جديد</button>
+                </div>
 
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="p-3.5">الكود</th>
+                                    <th class="p-3.5">الاسم</th>
+                                    <th class="p-3.5">البريد</th>
+                                    <th class="p-3.5">القسم</th>
+                                    <th class="p-3.5">بصمة الوجه (AI)</th>
+                                    <th class="p-3.5">الجهاز</th>
+                                    <th class="p-3.5 text-center">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employees-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: BRANCHES -->
+            <section id="tab-branches" class="hidden space-y-5">
+                <div
+                    class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">
-                            أقصى دقة مقبولة لإشارة الـ GPS بالمتر (Max GPS Accuracy Threshold)
-                        </label>
-                        <input id="set-gps-acc" type="number" class="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-indigo-600">
-                        <p class="text-[11px] text-slate-400 mt-1">أي إشارة GPS دقتها أسوأ من هذا الرقم (مثلاً 30 متراً) تُرفض لأنها مشكوك فيها.</p>
+                        <h2 class="text-lg font-bold text-slate-900">الفروع والنطاق الجغرافي (Geofencing + Office IP +
+                            Rotating QR)</h2>
+                        <p class="text-xs text-slate-500">أضف IP شبكة واي فاي الشركة أو افتح شاشة QR المدخل المتغيرة
+                            لتأمين حضور موظفي iPhone و Android.</p>
                     </div>
+                    <button onclick="openModal('modal-add-branch')"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow">+
+                        إضافة فرع جديد</button>
+                </div>
 
-                    <div class="pt-2">
-                        <button onclick="saveSettings()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-2xl text-xs transition shadow-lg shadow-indigo-600/20">
-                            💾 حفظ إعدادات الأمان
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="p-3.5">الفرع</th>
+                                    <th class="p-3.5">الكود</th>
+                                    <th class="p-3.5">GPS والنطاق</th>
+                                    <th class="p-3.5">IPs واي فاي الشركة</th>
+                                    <th class="p-3.5">إلزام QR المدخل</th>
+                                    <th class="p-3.5 text-center">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="branches-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: DEVICES -->
+            <section id="tab-devices" class="hidden space-y-5">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <h2 class="text-lg font-bold text-slate-900">الأجهزة المربوطة (1:1 Hardware Binding)</h2>
+                    <p class="text-xs text-slate-500">يمكنك حظر أي هاتف فوراً في حالة الاشتباه أو فقدان الهاتف.</p>
+                </div>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="p-3.5">الموديل</th>
+                                    <th class="p-3.5">النظام</th>
+                                    <th class="p-3.5">بصمة الجهاز</th>
+                                    <th class="p-3.5">الحالة</th>
+                                    <th class="p-3.5">آخر ظهور</th>
+                                    <th class="p-3.5 text-center">التحكم</th>
+                                </tr>
+                            </thead>
+                            <tbody id="devices-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: LOGS & REPORTS -->
+            <section id="tab-logs" class="hidden space-y-5">
+                <div
+                    class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end justify-between gap-3">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">من تاريخ</label>
+                            <input id="filter-date-from" type="date"
+                                class="text-xs p-2 rounded-xl border border-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold text-slate-600 mb-1">إلى تاريخ</label>
+                            <input id="filter-date-to" type="date"
+                                class="text-xs p-2 rounded-xl border border-slate-300">
+                        </div>
+                        <button onclick="loadLogsFiltered()"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl">🔍
+                            تصفية</button>
+                    </div>
+                    <button onclick="exportExcelCsv()"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow flex items-center gap-1.5">
+                        <span>📊</span><span>تصدير تقرير Excel (CSV)</span>
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 bg-slate-50 border-b font-bold text-sm">📋 سجل الحضور والانصراف</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="p-3 text-center">الصورة</th>
+                                    <th class="p-3">الموظف</th>
+                                    <th class="p-3">الفرع</th>
+                                    <th class="p-3">النوع</th>
+                                    <th class="p-3">الحالة</th>
+                                    <th class="p-3">المسافة</th>
+                                    <th class="p-3">تطابق AI</th>
+                                    <th class="p-3">التحقق الإضافي</th>
+                                    <th class="p-3">السبب</th>
+                                    <th class="p-3">التوقيت الرسمي</th>
+                                </tr>
+                            </thead>
+                            <tbody id="full-logs-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-rose-200 shadow-sm overflow-hidden">
+                    <div class="p-4 bg-rose-50 border-b font-bold text-sm text-rose-900">🚨 سجل تنبيهات الأمان والتلاعب
+                        (محفوظ للتدقيق)</div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-rose-50/40 text-rose-600 border-b">
+                                <tr>
+                                    <th class="p-3">النوع</th>
+                                    <th class="p-3">الخطورة</th>
+                                    <th class="p-3">التفاصيل</th>
+                                    <th class="p-3">IP</th>
+                                    <th class="p-3">التوقيت</th>
+                                </tr>
+                            </thead>
+                            <tbody id="full-frauds-body" class="divide-y divide-rose-50"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 6: SETTINGS -->
+            <section id="tab-settings" class="hidden">
+                <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm max-w-2xl mx-auto space-y-5">
+                    <div>
+                        <h2 class="text-xl font-black text-slate-900">إعدادات الأمان (محفوظة دائماً في قاعدة البيانات)
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-1">أي تعديل هنا يُحفظ في قاعدة البيانات ويبقى سارياً حتى بعد
+                            إعادة تشغيل السيرفر.</p>
+                    </div>
+                    <div class="space-y-4 text-xs">
+                        <div>
+                            <label class="block font-bold text-slate-700 mb-1">عتبة تطابق الوجه بالذكاء الاصطناعي (SFace
+                                Threshold)</label>
+                            <div class="flex items-center gap-3">
+                                <input id="set-face-threshold" type="range" min="0.30" max="0.75" step="0.01"
+                                    class="w-full accent-indigo-600">
+                                <span id="set-face-threshold-val"
+                                    class="text-sm font-black text-indigo-700 w-12 text-center">0.42</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400">القيمة الموصى بها لمحرك SFace هي 0.40 – 0.45 (القيمة
+                                الرسمية القياسية 0.363).</p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">عتبة الحيوية (Passive
+                                    Liveness)</label>
+                                <input id="set-liveness-threshold" type="number" step="0.05" min="0.2" max="0.95"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">مدة صلاحية التحدي (ثانية)</label>
+                                <input id="set-nonce-ttl" type="number" min="15" max="120"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">أقصى دقة GPS مقبولة (متر)</label>
+                                <input id="set-gps-acc" type="number" min="10" max="200"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block font-bold text-slate-700 mb-1">مدة تجديد QR المدخل (ثانية)</label>
+                                <input id="set-qr-rot" type="number" min="10" max="60"
+                                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                            </div>
+                        </div>
+                        <div class="space-y-2.5 pt-2 border-t">
+                            <label class="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+                                <input id="set-req-ai" type="checkbox" class="w-4 h-4 accent-indigo-600">
+                                <span>إلزام تحليل الوجه والحيوية على السيرفر (Server-Side AI — موصى به دائماً)</span>
+                            </label>
+                            <label class="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+                                <input id="set-req-anchor" type="checkbox" class="w-4 h-4 accent-indigo-600">
+                                <span>إلزام التحقق الإضافي (IP واي فاي الشركة أو QR المدخل أو Wi-Fi BSSID) عند ضبطه
+                                    للفرع</span>
+                            </label>
+                            <label class="flex items-center gap-2 font-bold text-slate-700 cursor-pointer">
+                                <input id="set-dup-guard" type="checkbox" class="w-4 h-4 accent-indigo-600">
+                                <span>منع تكرار تسجيل الحضور مرتين أو الانصراف بدون حضور</span>
+                            </label>
+                        </div>
+                        <button onclick="saveSettings()"
+                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-2xl text-xs shadow-lg">
+                            💾 حفظ الإعدادات
                         </button>
                     </div>
                 </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- Modal: Add Employee -->
+    <div id="modal-add-employee"
+        class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-slate-900">إضافة موظف جديد</h3>
+                <button onclick="closeModal('modal-add-employee')"
+                    class="text-slate-400 text-xl font-bold">&times;</button>
             </div>
-
-        </section>
-
-    </main>
-
-    <!-- ============================================================== -->
-    <!-- MODALS                                                         -->
-    <!-- ============================================================== -->
-
-    <!-- Modal 1: Add Branch -->
-    <div id="modal-add-branch" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 class="font-bold text-slate-900 text-base">إضافة فرع / موقع عمل جديد</h3>
-                <button onclick="closeModal('modal-add-branch')" class="text-slate-400 hover:text-slate-600 font-black text-lg">&times;</button>
-            </div>
-            <form onsubmit="submitAddBranch(event)" class="space-y-3">
+            <form onsubmit="submitAddEmployee(event)" class="space-y-3 text-xs">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">اسم الفرع</label>
-                    <input id="b-name" type="text" required placeholder="مثال: فرع التجمع الخامس" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
+                    <label class="block font-bold text-slate-700 mb-1">كود الموظف (فريد)</label>
+                    <input id="e-code" type="text" required placeholder="EMP-3001"
+                        class="w-full p-2.5 rounded-xl border border-slate-300 font-mono uppercase">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">كود الفرع (فريد)</label>
-                    <input id="b-code" type="text" required placeholder="مثال: BR-TAGAMO3" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
+                    <label class="block font-bold text-slate-700 mb-1">الاسم بالكامل</label>
+                    <input id="e-name" type="text" required placeholder="محمد علي سالم"
+                        class="w-full p-2.5 rounded-xl border border-slate-300">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">البريد الإلكتروني</label>
+                    <input id="e-email" type="email" required placeholder="name@company.com"
+                        class="w-full p-2.5 rounded-xl border border-slate-300">
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">خط العرض (Lat)</label>
-                        <input id="b-lat" type="number" step="any" required placeholder="30.0444" class="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-mono">
+                        <label class="block font-bold text-slate-700 mb-1">الهاتف (اختياري)</label>
+                        <input id="e-phone" type="text" placeholder="010..."
+                            class="w-full p-2.5 rounded-xl border border-slate-300">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">خط الطول (Lng)</label>
-                        <input id="b-lng" type="number" step="any" required placeholder="31.2357" class="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-mono">
+                        <label class="block font-bold text-slate-700 mb-1">القسم</label>
+                        <input id="e-dept" type="text" placeholder="المبيعات"
+                            class="w-full p-2.5 rounded-xl border border-slate-300">
                     </div>
                 </div>
-                <button type="button" onclick="getCurrentLocationForBranch()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs py-2 rounded-xl font-bold transition flex items-center justify-center gap-1.5">
-                    <span>📍 تحديد إحداثيات موقعي الحالي تلقائياً</span>
-                </button>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">نصف قطر السماح بالمتر (Geofence Radius)</label>
-                    <input id="b-radius" type="number" required value="80" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">شبكات الواي فاي المقبولة (BSSID تفصلها فواصل)</label>
-                    <input id="b-wifi" type="text" placeholder="00:14:22:01:23:45, aa:bb:cc:dd:ee:ff" class="w-full text-xs p-2.5 rounded-xl border border-slate-300 font-mono">
-                </div>
                 <div class="pt-2 flex gap-2">
-                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition">
-                        حفظ الفرع
-                    </button>
-                    <button type="button" onclick="closeModal('modal-add-branch')" class="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">
-                        إلغاء
-                    </button>
+                    <button type="submit"
+                        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl">حفظ
+                        وتوليد كود التفعيل</button>
+                    <button type="button" onclick="closeModal('modal-add-employee')"
+                        class="bg-slate-100 text-slate-700 font-bold px-4 rounded-xl">إلغاء</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Modal 3: View Punch Face Photo -->
-    <div id="modal-photo-preview" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 text-center space-y-4 relative">
-            <button onclick="closeModal('modal-photo-preview')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
-            <div class="w-44 h-44 mx-auto rounded-full overflow-hidden border-4 border-indigo-600 shadow-xl shadow-indigo-900/20 bg-slate-100 flex items-center justify-center">
-                <img id="photo-preview-img" src="" alt="صورة البصمة الحية" class="w-full h-full object-cover">
+    <!-- Modal: Activation Code Display -->
+    <div id="modal-activation"
+        class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+            <div class="text-4xl">🔑</div>
+            <h3 class="font-black text-slate-900 text-base">كود تفعيل الموظف (صالح 48 ساعة)</h3>
+            <p id="act-emp-label" class="text-xs text-slate-500 font-bold"></p>
+            <div id="act-code-box"
+                class="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 font-mono text-2xl font-black text-indigo-700 tracking-widest">
             </div>
-            <div>
-                <h3 id="photo-preview-name" class="text-base font-extrabold text-slate-900"></h3>
-                <p id="photo-preview-time" class="text-xs text-slate-500 font-mono mt-0.5"></p>
+            <p class="text-[11px] text-slate-500">أرسل الرسالة التالية للموظف على واتساب ليفتح التطبيق ويسجل وجهه ويربط
+                هاتفه مرة واحدة:</p>
+            <textarea id="act-share-msg" readonly rows="4"
+                class="w-full text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 text-right"></textarea>
+            <div class="flex gap-2">
+                <button onclick="copyActivationMsg()"
+                    class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs">📋
+                    نسخ الرسالة لواتساب</button>
+                <button onclick="closeModal('modal-activation')"
+                    class="bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">إغلاق</button>
             </div>
-            <div id="photo-preview-details" class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs text-right space-y-1.5 font-mono text-slate-700">
-            </div>
-            <button onclick="closeModal('modal-photo-preview')" class="w-full bg-slate-800 hover:bg-slate-900 py-2.5 rounded-xl text-xs font-bold text-white transition">
-                إغلاق
-            </button>
         </div>
     </div>
-    <div id="modal-add-employee" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
-                <h3 class="font-bold text-slate-900 text-base">إضافة موظف جديد</h3>
-                <button onclick="closeModal('modal-add-employee')" class="text-slate-400 hover:text-slate-600 font-black text-lg">&times;</button>
+
+    <!-- Modal: Add Branch -->
+    <div id="modal-add-branch"
+        class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-slate-900">إضافة فرع / مقر عمل</h3>
+                <button onclick="closeModal('modal-add-branch')"
+                    class="text-slate-400 text-xl font-bold">&times;</button>
             </div>
-            <form onsubmit="submitAddEmployee(event)" class="space-y-3">
+            <form onsubmit="submitAddBranch(event)" class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">اسم الفرع</label>
+                        <input id="b-name" type="text" required placeholder="المقر الرئيسي"
+                            class="w-full p-2.5 rounded-xl border border-slate-300">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">الكود (فريد)</label>
+                        <input id="b-code" type="text" required placeholder="HQ-01"
+                            class="w-full p-2.5 rounded-xl border border-slate-300 font-mono uppercase">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">خط العرض (Lat)</label>
+                        <input id="b-lat" type="number" step="any" required
+                            class="w-full p-2.5 rounded-xl border border-slate-300 font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">خط الطول (Lng)</label>
+                        <input id="b-lng" type="number" step="any" required
+                            class="w-full p-2.5 rounded-xl border border-slate-300 font-mono">
+                    </div>
+                </div>
+                <button type="button" onclick="getCurrentLocationForBranch()"
+                    class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl font-bold">📍 التقاط
+                    إحداثيات موقعي الحالي</button>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">كود الموظف (فريد)</label>
-                    <input id="e-code" type="text" required placeholder="مثال: EMP-3001" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
+                    <label class="block font-bold text-slate-700 mb-1">نصف قطر السماح بالمتر</label>
+                    <input id="b-radius" type="number" required value="100"
+                        class="w-full p-2.5 rounded-xl border border-slate-300">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">الاسم بالكامل</label>
-                    <input id="e-name" type="text" required placeholder="مثال: محمد علي سالم" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
+                    <label class="block font-bold text-slate-700 mb-1">IP واي فاي الشركة (يعمل على iPhone و
+                        Android)</label>
+                    <div class="flex gap-1.5">
+                        <input id="b-ips" type="text" placeholder="مثال: 197.50.10.25"
+                            class="flex-1 p-2.5 rounded-xl border border-slate-300 font-mono">
+                        <button type="button" onclick="fillCurrentOfficeIp()"
+                            class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 rounded-xl font-bold">🌐 IP
+                            الحالي</button>
+                    </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني</label>
-                    <input id="e-email" type="email" required placeholder="name@company.com" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
+                    <label class="block font-bold text-slate-700 mb-1">Wi-Fi BSSID (اختياري — لتطبيق Android)</label>
+                    <input id="b-wifi" type="text" placeholder="00:14:22:01:23:45"
+                        class="w-full p-2.5 rounded-xl border border-slate-300 font-mono">
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">القسم</label>
-                    <input id="e-dept" type="text" placeholder="مثال: المالية، المبيعات" class="w-full text-xs p-2.5 rounded-xl border border-slate-300">
-                </div>
+                <label class="flex items-center gap-2 font-bold text-slate-700 cursor-pointer pt-1">
+                    <input id="b-req-qr" type="checkbox" class="w-4 h-4 accent-indigo-600">
+                    <span>إلزام الموظف بمسح كود QR المتغير من شاشة المدخل</span>
+                </label>
                 <div class="pt-2 flex gap-2">
-                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition">
-                        حفظ الموظف
-                    </button>
-                    <button type="button" onclick="closeModal('modal-add-employee')" class="bg-slate-100 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs">
-                        إلغاء
-                    </button>
+                    <button type="submit"
+                        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl">حفظ
+                        الفرع</button>
+                    <button type="button" onclick="closeModal('modal-add-branch')"
+                        class="bg-slate-100 text-slate-700 font-bold px-4 rounded-xl">إلغاء</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- ============================================================== -->
-    <!-- JAVASCRIPT LOGIC                                               -->
-    <!-- ============================================================== -->
+    <!-- Modal: Change Password -->
+    <div id="modal-change-password"
+        class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-slate-900">تغيير كلمة مرور الأدمن</h3>
+                <button onclick="closeModal('modal-change-password')"
+                    class="text-slate-400 text-xl font-bold">&times;</button>
+            </div>
+            <form onsubmit="submitChangePassword(event)" class="space-y-3 text-xs">
+                <input id="cp-old" type="password" required placeholder="كلمة المرور الحالية"
+                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                <input id="cp-new" type="password" required minlength="8"
+                    placeholder="كلمة المرور الجديدة (8 أحرف على الأقل)"
+                    class="w-full p-2.5 rounded-xl border border-slate-300">
+                <button type="submit"
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl">تحديث كلمة
+                    المرور</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Protected Photo Preview -->
+    <div id="modal-photo-preview"
+        class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 relative">
+            <button onclick="closeModal('modal-photo-preview')"
+                class="absolute top-4 left-4 text-slate-400 text-xl font-bold">&times;</button>
+            <div
+                class="w-44 h-44 mx-auto rounded-full overflow-hidden border-4 border-indigo-600 shadow-xl bg-slate-100">
+                <img id="photo-preview-img" src="" alt="صورة البصمة" class="w-full h-full object-cover">
+            </div>
+            <h3 id="photo-preview-name" class="text-base font-extrabold text-slate-900"></h3>
+            <p id="photo-preview-time" class="text-xs text-slate-500 font-mono"></p>
+            <button onclick="closeModal('modal-photo-preview')"
+                class="w-full bg-slate-800 py-2.5 rounded-xl text-xs font-bold text-white">إغلاق</button>
+        </div>
+    </div>
+
     <script>
-        let currentEmployees = [];
-        let currentBranches = [];
-        let currentDevices = [];
-        let currentSettings = {};
+        let adminToken = sessionStorage.getItem('admin_jwt') || '';
+        let detectedPublicIp = '';
+        let activeObjectUrl = null;
 
-        // Helper: Convert UTC timestamp correctly to Local Device Time (e.g. Cairo Time UTC+2)
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, s => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[s]));
+        }
+
         function formatLocalTime(ts) {
             if (!ts) return '--';
-            let s = String(ts).trim();
-            if (s.includes('T')) {
-                const parts = s.split('T');
-                if (!parts[1].includes('Z') && !parts[1].includes('+') && !parts[1].includes('-')) {
-                    s += 'Z';
-                }
-            } else if (!s.includes('Z') && !s.includes('+')) {
-                s = s.replace(' ', 'T') + 'Z';
-            }
-            const d = new Date(s);
-            if (isNaN(d.getTime())) return String(ts);
-            return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            const d = new Date(ts);
+            return isNaN(d.getTime()) ? String(ts) : d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
         }
 
         function formatLocalDateTime(ts) {
             if (!ts) return '--';
-            let s = String(ts).trim();
-            if (s.includes('T')) {
-                const parts = s.split('T');
-                if (!parts[1].includes('Z') && !parts[1].includes('+') && !parts[1].includes('-')) {
-                    s += 'Z';
-                }
-            } else if (!s.includes('Z') && !s.includes('+')) {
-                s = s.replace(' ', 'T') + 'Z';
-            }
-            const d = new Date(s);
-            if (isNaN(d.getTime())) return String(ts);
-            return d.toLocaleDateString('ar-EG') + ' ' + d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+            const d = new Date(ts);
+            return isNaN(d.getTime()) ? String(ts) : d.toLocaleDateString('ar-EG') + ' ' + d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
         }
 
-        // Tab Switching
-        function switchTab(tabId) {
-            document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            
-            document.getElementById(tabId).classList.remove('hidden');
-            const activeBtn = document.getElementById('btn-' + tabId);
-            if (activeBtn) activeBtn.classList.add('active');
+        async function apiFetch(url, options = {}) {
+            const headers = Object.assign({}, options.headers || {});
+            if (adminToken) headers['Authorization'] = 'Bearer ' + adminToken;
+            const res = await fetch(url, Object.assign({}, options, { headers }));
+            if (res.status === 401) {
+                logoutAdmin();
+                throw new Error('انتهت الجلسة، يرجى تسجيل الدخول مجدداً');
+            }
+            return res;
         }
 
         function showToast(msg, isError = false) {
-            const toast = document.getElementById('toast');
-            toast.innerText = msg;
-            toast.className = `fixed bottom-6 left-6 z-50 px-5 py-3 rounded-2xl shadow-2xl text-xs font-bold flex items-center gap-2 ${
-                isError ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white border border-slate-700'
-            }`;
-            toast.classList.remove('hidden');
-            setTimeout(() => toast.classList.add('hidden'), 3500);
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.className = `fixed bottom-6 left-6 z-50 px-5 py-3 rounded-2xl shadow-2xl text-xs font-bold ${isError ? 'bg-rose-600 text-white' : 'bg-slate-900 text-white border border-slate-700'}`;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3500);
+        }
+
+        function switchTab(id) {
+            document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.remove('hidden');
+            document.getElementById('btn-' + id)?.classList.add('active');
         }
 
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
-        // Fetch & Load Data
+        // ==================== AUTH ====================
+        async function submitAdminLogin(e) {
+            e.preventDefault();
+            const errEl = document.getElementById('login-error');
+            errEl.classList.add('hidden');
+            const btn = document.getElementById('btn-login');
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('login-user').value.trim(),
+                        password: document.getElementById('login-pass').value
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    errEl.innerText = data.detail || 'بيانات الدخول غير صحيحة';
+                    errEl.classList.remove('hidden');
+                    return;
+                }
+                adminToken = data.access_token;
+                sessionStorage.setItem('admin_jwt', adminToken);
+                document.getElementById('admin-welcome').innerText = data.full_name || data.username;
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('app-shell').classList.remove('hidden');
+                loadData();
+            } catch (err) {
+                errEl.innerText = 'تعذر الاتصال بالسيرفر';
+                errEl.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function logoutAdmin() {
+            adminToken = '';
+            sessionStorage.removeItem('admin_jwt');
+            document.getElementById('app-shell').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+        }
+
+        async function submitChangePassword(e) {
+            e.preventDefault();
+            const res = await apiFetch('/api/v1/auth/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    current_password: document.getElementById('cp-old').value,
+                    new_password: document.getElementById('cp-new').value
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('تم تغيير كلمة المرور بنجاح');
+                closeModal('modal-change-password');
+                document.getElementById('cp-old').value = '';
+                document.getElementById('cp-new').value = '';
+            } else {
+                showToast(data.detail || 'فشل تغيير كلمة المرور', true);
+            }
+        }
+
+        // ==================== DATA LOADING ====================
         async function loadData() {
             try {
-                const [branches, employees, logs, frauds, devices, settings] = await Promise.all([
-                    fetch('/api/v1/admin/branches').then(r => r.json()),
-                    fetch('/api/v1/admin/employees').then(r => r.json()),
-                    fetch('/api/v1/admin/attendance-logs').then(r => r.json()),
-                    fetch('/api/v1/admin/fraud-alerts').then(r => r.json()),
-                    fetch('/api/v1/admin/devices').then(r => r.json()),
-                    fetch('/api/v1/admin/settings').then(r => r.json())
+                const [net, branches, employees, logs, frauds, devices, settings] = await Promise.all([
+                    apiFetch('/api/v1/admin/network-info').then(r => r.json()),
+                    apiFetch('/api/v1/admin/branches').then(r => r.json()),
+                    apiFetch('/api/v1/admin/employees').then(r => r.json()),
+                    apiFetch('/api/v1/admin/attendance-logs?limit=100').then(r => r.json()),
+                    apiFetch('/api/v1/admin/fraud-alerts?limit=100').then(r => r.json()),
+                    apiFetch('/api/v1/admin/devices').then(r => r.json()),
+                    apiFetch('/api/v1/admin/settings').then(r => r.json())
                 ]);
 
-                currentBranches = branches;
-                currentEmployees = employees;
-                currentSettings = settings;
+                detectedPublicIp = net.detected_public_ip || '';
+                document.getElementById('detected-ip-badge').innerText = detectedPublicIp;
 
-                // Update Stats
                 document.getElementById('stat-emp-count').innerText = employees.length;
                 document.getElementById('stat-branch-count').innerText = branches.length;
                 document.getElementById('count-emp-tab').innerText = employees.length;
@@ -627,74 +733,39 @@
                 document.getElementById('stat-approved-count').innerText = logs.filter(l => l.status === 'APPROVED').length;
                 document.getElementById('stat-fraud-count').innerText = frauds.length;
 
-                // Populate Sim Select
-                const simSelect = document.getElementById('sim-employee-select');
-                if (employees.length > 0) {
-                    simSelect.innerHTML = employees.map(e => `
-                        <option value="${e.employee_code}">${e.full_name} (${e.employee_code})</option>
-                    `).join('');
-                } else {
-                    simSelect.innerHTML = '<option value="">لا يوجد موظفين</option>';
-                }
-
-                // Render Employees Table
                 renderEmployees(employees);
-
-                // Render Branches Table
                 renderBranches(branches);
-
-                // Render Devices Table
                 renderDevices(devices);
-
-                // Render Logs
                 renderLogs(logs);
-
-                // Render Frauds
                 renderFrauds(frauds);
-
-                // Render Settings
-                document.getElementById('set-face-threshold').value = settings.FACE_SIMILARITY_THRESHOLD;
-                document.getElementById('set-face-threshold-val').innerText = settings.FACE_SIMILARITY_THRESHOLD;
-                document.getElementById('set-nonce-ttl').value = settings.CHALLENGE_EXPIRY_SECONDS;
-                document.getElementById('set-gps-acc').value = settings.MAX_GPS_ACCURACY_THRESHOLD_METERS;
-
+                renderSettings(settings);
             } catch (e) {
-                console.error("Error loading dashboard data:", e);
+                console.error(e);
             }
         }
 
         function renderEmployees(list) {
             const tbody = document.getElementById('employees-table-body');
-            if (list.length === 0) {
+            if (!list.length) {
                 tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400">لا يوجد موظفين مسجلين حالياً</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map(e => `
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-bold font-mono text-indigo-700">${e.employee_code}</td>
-                    <td class="p-3.5 font-bold text-slate-900">${e.full_name}</td>
-                    <td class="p-3.5 text-slate-500">${e.email}</td>
-                    <td class="p-3.5 text-slate-600">${e.department || 'عام'}</td>
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 font-bold font-mono text-indigo-700">${escapeHtml(e.employee_code)}</td>
+                    <td class="p-3.5 font-bold text-slate-900">${escapeHtml(e.full_name)}</td>
+                    <td class="p-3.5 text-slate-500">${escapeHtml(e.email)}</td>
+                    <td class="p-3.5 text-slate-600">${escapeHtml(e.department || 'العام')}</td>
                     <td class="p-3.5">
-                        ${e.is_face_enrolled ? 
-                            '<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold text-[10px]">مسجلة ✅ (512-d)</span>' : 
-                            '<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold text-[10px]">غير مسجلة ⚠️</span>'}
+                        ${e.is_face_enrolled
+                    ? `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold text-[10px]">مسجلة ✅ (${escapeHtml(e.face_model_version || 'AI')})</span>`
+                    : '<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold text-[10px]">بانتظار التفعيل ⚠️</span>'}
                     </td>
-                    <td class="p-3.5">
-                        ${e.bound_device_id ? 
-                            '<span class="text-indigo-600 font-semibold">مرتبط بجهاز</span>' : 
-                            '<span class="text-slate-400">غير مرتبط</span>'}
-                    </td>
-                    <td class="p-3.5 text-center flex items-center justify-center gap-1.5">
-                        <button onclick="resetEmployeeFace('${e.employee_code}')" title="إعادة تعيين البصمة ليمسحها ويسجلها من تطبيق الهاتف" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-bold text-[10px] transition border border-amber-200">
-                            🔄 إعادة تعيين للموبايل
-                        </button>
-                        <button onclick="enrollSampleFace('${e.employee_code}')" title="توليد بصمة وجه رقمية ذكية" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-bold text-[11px] transition">
-                            📸 توليد بصمة
-                        </button>
-                        <button onclick="deleteEmployee('${e.id}')" title="حذف الموظف" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1">
-                            🗑️
-                        </button>
+                    <td class="p-3.5">${e.bound_device_id ? '<span class="text-indigo-600 font-bold">مربوط 📱</span>' : '<span class="text-slate-400">غير مربوط</span>'}</td>
+                    <td class="p-3.5 text-center flex flex-wrap items-center justify-center gap-1.5">
+                        ${!e.is_face_enrolled ? `<button onclick="genActivationCode('${escapeHtml(e.employee_code)}', '${escapeHtml(e.full_name)}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-indigo-200">🔑 كود تفعيل</button>` : ''}
+                        <button onclick="resetEmployeeFace('${escapeHtml(e.employee_code)}', '${escapeHtml(e.full_name)}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-amber-200">🔄 إعادة تعيين</button>
+                        <button onclick="deleteEmployee('${escapeHtml(e.id)}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1" title="تعطيل الموظف">🚫</button>
                     </td>
                 </tr>
             `).join('');
@@ -702,48 +773,40 @@
 
         function renderBranches(list) {
             const tbody = document.getElementById('branches-table-body');
-            if (list.length === 0) {
+            if (!list.length) {
                 tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">لا توجد فروع مسجلة</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map(b => `
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-bold text-slate-900">${b.name}</td>
-                    <td class="p-3.5 font-mono text-slate-500">${b.code}</td>
-                    <td class="p-3.5 font-mono text-[11px] text-slate-600">${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}</td>
-                    <td class="p-3.5"><span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded">${b.radius_meters} م</span></td>
-                    <td class="p-3.5 font-mono text-[11px] text-slate-500">${b.allowed_wifi_bssids?.join(', ') || 'كل الشبكات مسموحة'}</td>
-                    <td class="p-3.5 text-center">
-                        <button onclick="deleteBranch('${b.id}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1">
-                            🗑️ حذف
-                        </button>
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 font-bold text-slate-900">${escapeHtml(b.name)}</td>
+                    <td class="p-3.5 font-mono text-indigo-700 font-bold">${escapeHtml(b.code)}</td>
+                    <td class="p-3.5 font-mono text-[11px] text-slate-600">${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)} <span class="bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded">${b.radius_meters}م</span></td>
+                    <td class="p-3.5 font-mono text-[11px] text-slate-500">${(b.allowed_public_ips && b.allowed_public_ips.length) ? escapeHtml(b.allowed_public_ips.join(', ')) : 'غير مقيد'}</td>
+                    <td class="p-3.5">${b.require_qr_code ? '<span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold text-[10px]">إجباري ✅</span>' : '<span class="text-slate-400 text-[10px]">اختياري</span>'}</td>
+                    <td class="p-3.5 text-center flex items-center justify-center gap-2">
+                        <button onclick="openBranchKiosk('${escapeHtml(b.code)}')" class="bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1 rounded-lg font-bold text-[10px]">📺 شاشة QR المدخل</button>
+                        <button onclick="deleteBranch('${escapeHtml(b.id)}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1">🚫</button>
                     </td>
                 </tr>
             `).join('');
         }
 
         function renderDevices(list) {
-            currentDevices = list;
             const tbody = document.getElementById('devices-table-body');
-            if (list.length === 0) {
+            if (!list.length) {
                 tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">لا توجد أجهزة مسجلة</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map(d => `
-                <tr class="hover:bg-slate-50 transition">
-                    <td class="p-3.5 font-bold text-slate-800">${d.device_model}</td>
-                    <td class="p-3.5 uppercase font-semibold text-slate-600">${d.os_name} ${d.os_version}</td>
-                    <td class="p-3.5 font-mono text-[11px] text-slate-400">${d.device_fingerprint.slice(0, 24)}...</td>
-                    <td class="p-3.5">
-                        ${d.is_blocked ? 
-                            '<span class="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">محظور 🚫</span>' : 
-                            '<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">معتمد وموثوق ✅</span>'}
-                    </td>
-                    <td class="p-3.5 font-mono text-slate-400">${new Date(d.registered_at).toLocaleDateString('ar-EG')}</td>
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3.5 font-bold text-slate-800">${escapeHtml(d.device_model)}</td>
+                    <td class="p-3.5 uppercase font-semibold text-slate-600">${escapeHtml(d.os_name)} ${escapeHtml(d.os_version)}</td>
+                    <td class="p-3.5 font-mono text-[11px] text-slate-400">${escapeHtml(d.device_fingerprint.slice(0, 22))}...</td>
+                    <td class="p-3.5">${d.is_blocked ? '<span class="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">محظور 🚫</span>' : '<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">موثوق ✅</span>'}</td>
+                    <td class="p-3.5 font-mono text-slate-400">${formatLocalDateTime(d.last_seen_at || d.registered_at)}</td>
                     <td class="p-3.5 text-center">
-                        <button onclick="toggleDeviceBlock('${d.id}')" class="text-xs font-bold px-3 py-1 rounded-xl transition ${
-                            d.is_blocked ? 'bg-emerald-600 text-white' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
-                        }">
+                        <button onclick="toggleDeviceBlock('${escapeHtml(d.id)}')" class="text-xs font-bold px-3 py-1 rounded-xl ${d.is_blocked ? 'bg-emerald-600 text-white' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'}">
                             ${d.is_blocked ? 'فك الحظر' : 'حظر الهاتف'}
                         </button>
                     </td>
@@ -751,400 +814,292 @@
             `).join('');
         }
 
-        function openPhotoModal(imgSrc, name, punchType, timeStr, status = 'APPROVED', similarity = null) {
-            document.getElementById('photo-preview-img').src = imgSrc;
-            document.getElementById('photo-preview-name').innerText = name + ` (${punchType === 'CHECK_IN' ? 'تسجيل حضور 🟢' : 'تسجيل انصراف 🔴'})`;
-            document.getElementById('photo-preview-time').innerText = `توقيت البصمة: ${timeStr}`;
-            
-            let details = `<p><strong>الحالة:</strong> ${status === 'APPROVED' ? '<span class="text-emerald-600 font-bold">معتمد ومقبول ✅</span>' : '<span class="text-rose-600 font-bold">مرفوض ❌</span>'}</p>`;
-            if (similarity) {
-                details += `<p><strong>تطابق ملامح الوجه:</strong> ${(parseFloat(similarity) * 100).toFixed(1)}%</p>`;
-            }
-            details += `<p class="text-[10px] text-slate-400 mt-1">📸 تم التقاط هذه الصورة الحية من كاميرا الموظف لحظة إثبات الحضور لمنع أي تلاعب أو غش.</p>`;
-            document.getElementById('photo-preview-details').innerHTML = details;
-            openModal('modal-photo-preview');
-        }
-
         function renderLogs(list) {
-            // Quick logs
             const qBody = document.getElementById('quick-logs-body');
             const fBody = document.getElementById('full-logs-body');
 
-            const approvedOnly = list.filter(l => l.status === 'APPROVED');
-            if (approvedOnly.length === 0) {
-                qBody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">لا توجد بصمات معتمدة</td></tr>';
-            } else {
-                qBody.innerHTML = approvedOnly.slice(0, 5).map(l => `
-                    <tr>
-                        <td class="p-2.5">
-                            ${l.face_snapshot ? `
-                                <img src="${l.face_snapshot}" onclick="openPhotoModal('${l.face_snapshot}', '${l.employee_name}', '${l.punch_type}', '${new Date(l.server_timestamp).toLocaleString('ar-EG')}', '${l.status}', '${l.face_similarity_score}')" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm cursor-pointer hover:scale-110 transition" title="اضغط لتكبير الصورة">
-                            ` : `
-                                <div class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-xs font-bold border border-slate-200">👤</div>
-                            `}
-                        </td>
-                        <td class="p-2.5 font-bold text-slate-800">${l.employee_name}</td>
-                        <td class="p-2.5"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${l.punch_type === 'CHECK_IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${l.punch_type === 'CHECK_IN' ? 'حضور' : 'انصراف'}</span></td>
-                        <td class="p-2.5 font-mono text-slate-600">${Math.round(l.distance_to_branch_meters || 0)} م</td>
-                        <td class="p-2.5 font-mono text-slate-400">${formatLocalTime(l.server_timestamp)}</td>
-                    </tr>
-                `).join('');
-            }
+            const approved = list.filter(l => l.status === 'APPROVED');
+            qBody.innerHTML = approved.length ? approved.slice(0, 8).map(l => `
+                <tr>
+                    <td class="p-2.5 font-bold text-slate-800">${escapeHtml(l.employee_name)}</td>
+                    <td class="p-2.5"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${l.punch_type === 'CHECK_IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${l.punch_type === 'CHECK_IN' ? 'حضور' : 'انصراف'}</span></td>
+                    <td class="p-2.5 font-mono text-slate-600">${Math.round(l.distance_to_branch_meters || 0)}م</td>
+                    <td class="p-2.5 font-mono text-indigo-700 font-bold">${l.face_similarity_score ? (l.face_similarity_score * 100).toFixed(0) + '%' : '--'}</td>
+                    <td class="p-2.5 font-mono text-slate-400">${formatLocalTime(l.server_timestamp)}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="5" class="p-4 text-center text-slate-400">لا توجد بصمات معتمدة</td></tr>';
 
-            // Full logs
-            if (list.length === 0) {
-                fBody.innerHTML = '<tr><td colspan="9" class="p-6 text-center text-slate-400">لا توجد سجلات</td></tr>';
-            } else {
-                fBody.innerHTML = list.map(l => `
-                    <tr class="hover:bg-slate-50 transition">
-                        <td class="p-3 text-center">
-                            ${l.face_snapshot ? `
-                                <img src="${l.face_snapshot}" onclick="openPhotoModal('${l.face_snapshot}', '${l.employee_name}', '${l.punch_type}', '${formatLocalDateTime(l.server_timestamp)}', '${l.status}', '${l.face_similarity_score}')" class="w-10 h-10 rounded-full object-cover border-2 border-indigo-500 shadow-md cursor-pointer hover:scale-110 transition mx-auto" title="اضغط لتكبير صورة الموظف">
-                            ` : `
-                                <span class="text-slate-400 text-[10px]">بدون صورة</span>
-                            `}
-                        </td>
-                        <td class="p-3 font-bold text-slate-800">${l.employee_name}</td>
-                        <td class="p-3 text-slate-500">${l.branch_name || '--'}</td>
-                        <td class="p-3"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${l.punch_type === 'CHECK_IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${l.punch_type}</span></td>
-                        <td class="p-3"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${l.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${l.status}</span></td>
-                        <td class="p-3 font-mono">${l.distance_to_branch_meters ? Math.round(l.distance_to_branch_meters) + 'م' : '--'}</td>
-                        <td class="p-3 font-mono">${l.face_similarity_score ? (l.face_similarity_score).toFixed(3) : '--'}</td>
-                        <td class="p-3 text-rose-600 text-[11px] font-mono">${l.rejection_reason || '--'}</td>
-                        <td class="p-3 font-mono text-slate-400">${formatLocalTime(l.server_timestamp)}</td>
-                    </tr>
-                `).join('');
-            }
+            fBody.innerHTML = list.length ? list.map(l => {
+                const anchors = [];
+                if (l.office_ip_verified) anchors.push('IP✅');
+                if (l.qr_verified) anchors.push('QR✅');
+                if (l.wifi_bssid_verified) anchors.push('WiFi✅');
+                return `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3 text-center">
+                        ${l.face_snapshot
+                        ? `<button onclick="openProtectedPhoto('${escapeHtml(l.face_snapshot)}', '${escapeHtml(l.employee_name)}', '${escapeHtml(formatLocalDateTime(l.server_timestamp))}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-bold text-[10px]">📷 عرض</button>`
+                        : '<span class="text-slate-400 text-[10px]">--</span>'}
+                    </td>
+                    <td class="p-3 font-bold text-slate-800">${escapeHtml(l.employee_name)}</td>
+                    <td class="p-3 text-slate-500">${escapeHtml(l.branch_name)}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${l.punch_type === 'CHECK_IN' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${l.punch_type === 'CHECK_IN' ? 'حضور' : 'انصراف'}</span></td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${l.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${l.status === 'APPROVED' ? 'مقبول' : 'مرفوض'}</span></td>
+                    <td class="p-3 font-mono">${l.distance_to_branch_meters != null ? Math.round(l.distance_to_branch_meters) + 'م' : '--'}</td>
+                    <td class="p-3 font-mono font-bold">${l.face_similarity_score != null ? (l.face_similarity_score * 100).toFixed(1) + '%' : '--'}</td>
+                    <td class="p-3 font-mono text-[10px] text-emerald-700 font-bold">${anchors.join(' ') || '--'}</td>
+                    <td class="p-3 text-rose-600 text-[11px]">${escapeHtml(l.rejection_reason || '--')}</td>
+                    <td class="p-3 font-mono text-slate-400">${formatLocalDateTime(l.server_timestamp)}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="10" class="p-6 text-center text-slate-400">لا توجد سجلات</td></tr>';
         }
 
         function renderFrauds(list) {
             const qBody = document.getElementById('quick-frauds-body');
             const fBody = document.getElementById('full-frauds-body');
-
-            if (list.length === 0) {
-                qBody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-400">لا توجد محاولات تلاعب مسجلة</td></tr>';
-                fBody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-slate-400">لا توجد محاولات تلاعب مسجلة</td></tr>';
-            } else {
-                qBody.innerHTML = list.slice(0, 5).map(f => `
-                    <tr>
-                        <td class="p-2.5 font-bold text-rose-700 text-[11px]">${f.alert_type}</td>
-                        <td class="p-2.5 font-mono text-[10px] text-slate-600">${JSON.stringify(f.details).slice(0, 35)}...</td>
-                        <td class="p-2.5 font-mono text-slate-400 text-[10px]">${formatLocalTime(f.created_at)}</td>
-                    </tr>
-                `).join('');
-
-                fBody.innerHTML = list.map(f => `
-                    <tr class="hover:bg-rose-50/20">
-                        <td class="p-3 font-bold text-rose-700">${f.alert_type}</td>
-                        <td class="p-3"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${f.severity === 'CRITICAL' ? 'bg-rose-600 text-white' : 'bg-amber-100 text-amber-800'}">${f.severity}</span></td>
-                        <td class="p-3 font-mono text-slate-600 text-[11px]">${JSON.stringify(f.details)}</td>
-                        <td class="p-3 font-mono text-slate-400">${formatLocalTime(f.created_at)}</td>
-                    </tr>
-                `).join('');
-            }
-        }
-
-        // ======================== ACTIONS ========================
-
-        // Enroll Biometric Face
-        async function enrollSampleFace(empCode) {
-            const res = await fetch(`/api/v1/admin/employees/${empCode}/enroll-sample-face`, {method: 'POST'});
-            if (res.ok) {
-                showToast(`تم تسجيل بصمة الوجه الرقمية بنجاح للموظف ${empCode}`);
-                loadData();
-            } else {
-                showToast("فشل تسجيل البصمة", true);
-            }
-        }
-
-        async function resetEmployeeFace(empCode) {
-            if (!confirm(`هل تريد إعادة تعيين بصمة الموظف ${empCode}؟\nسيتمكن الموظف الآن من فتح التطبيق من هاتفه وتسجيل وجهه لأول مرة مباشرة من الكاميرا!`)) return;
-            const res = await fetch(`/api/v1/admin/employees/${empCode}/reset-face`, {method: 'POST'});
-            if (res.ok) {
-                showToast(`تمت إعادة تعيين بصمة ${empCode}. الموظف يستطيع الآن التسجيل من الموبايل.`);
-                loadData();
-            } else {
-                showToast("فشل إعادة التعيين", true);
-            }
-        }
-
-        // Add Branch
-        async function submitAddBranch(e) {
-            e.preventDefault();
-            const wifi = document.getElementById('b-wifi').value.split(',').map(s => s.trim()).filter(Boolean);
-            const payload = {
-                name: document.getElementById('b-name').value,
-                code: document.getElementById('b-code').value,
-                latitude: parseFloat(document.getElementById('b-lat').value),
-                longitude: parseFloat(document.getElementById('b-lng').value),
-                radius_meters: parseInt(document.getElementById('b-radius').value),
-                allowed_wifi_bssids: wifi
-            };
-            const res = await fetch('/api/v1/admin/branches', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                showToast("تم إنشاء الفرع بنجاح");
-                closeModal('modal-add-branch');
-                loadData();
-            } else {
-                const err = await res.json();
-                showToast(err.detail || "حدث خطأ", true);
-            }
-        }
-
-        function getCurrentLocationForBranch() {
-            if (!navigator.geolocation) {
-                showToast("المتصفح لا يدعم تحديد الموقع", true);
+            if (!list.length) {
+                qBody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400">لا توجد محاولات تلاعب</td></tr>';
+                fBody.innerHTML = '<tr><td colspan="5" class="p-6 text-center text-slate-400">لا توجد محاولات تلاعب</td></tr>';
                 return;
             }
-            navigator.geolocation.getCurrentPosition(pos => {
-                document.getElementById('b-lat').value = pos.coords.latitude;
-                document.getElementById('b-lng').value = pos.coords.longitude;
-                showToast("تم تحديد إحداثياتك الحالية بدقة!");
-            }, err => {
-                showToast("يرجى السماح بصلاحية الموقع في المتصفح", true);
-            });
+            qBody.innerHTML = list.slice(0, 8).map(f => `
+                <tr>
+                    <td class="p-2.5 font-bold text-rose-700 text-[11px]">${escapeHtml(f.alert_type)}</td>
+                    <td class="p-2.5 text-[10px] text-slate-600">${escapeHtml(JSON.stringify(f.details).slice(0, 45))}</td>
+                    <td class="p-2.5 font-mono text-[10px] text-slate-500">${escapeHtml(f.client_ip || '')}</td>
+                    <td class="p-2.5 font-mono text-slate-400 text-[10px]">${formatLocalTime(f.created_at)}</td>
+                </tr>
+            `).join('');
+
+            fBody.innerHTML = list.map(f => `
+                <tr class="hover:bg-rose-50/20">
+                    <td class="p-3 font-bold text-rose-700">${escapeHtml(f.alert_type)}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded font-bold text-[10px] ${f.severity === 'CRITICAL' ? 'bg-rose-600 text-white' : 'bg-amber-100 text-amber-800'}">${escapeHtml(f.severity)}</span></td>
+                    <td class="p-3 font-mono text-slate-600 text-[11px]">${escapeHtml(JSON.stringify(f.details))}</td>
+                    <td class="p-3 font-mono text-slate-500">${escapeHtml(f.client_ip || '--')}</td>
+                    <td class="p-3 font-mono text-slate-400">${formatLocalDateTime(f.created_at)}</td>
+                </tr>
+            `).join('');
         }
 
-        async function deleteBranch(id) {
-            if (!confirm("هل أنت متأكد من حذف هذا الفرع؟")) return;
-            await fetch(`/api/v1/admin/branches/${id}`, {method: 'DELETE'});
-            showToast("تم حذف الفرع");
-            loadData();
+        function renderSettings(s) {
+            document.getElementById('set-face-threshold').value = s.FACE_SIMILARITY_THRESHOLD;
+            document.getElementById('set-face-threshold-val').innerText = s.FACE_SIMILARITY_THRESHOLD;
+            document.getElementById('set-liveness-threshold').value = s.PASSIVE_LIVENESS_THRESHOLD;
+            document.getElementById('set-nonce-ttl').value = s.CHALLENGE_EXPIRY_SECONDS;
+            document.getElementById('set-gps-acc').value = s.MAX_GPS_ACCURACY_THRESHOLD_METERS;
+            document.getElementById('set-qr-rot').value = s.QR_ROTATION_SECONDS;
+            document.getElementById('set-req-ai').checked = !!s.REQUIRE_SERVER_FACE_AI;
+            document.getElementById('set-req-anchor').checked = !!s.REQUIRE_WIFI_OR_BEACON;
+            document.getElementById('set-dup-guard').checked = !!s.PREVENT_DUPLICATE_PUNCH;
         }
 
-        // Add Employee
+        // ==================== ACTIONS ====================
+        function showActivationModal(empCode, fullName, activationCode) {
+            const link = `${window.location.origin}/mobile?code=${encodeURIComponent(empCode)}&act=${encodeURIComponent(activationCode)}`;
+            document.getElementById('act-emp-label').innerText = `${fullName} (${empCode})`;
+            document.getElementById('act-code-box').innerText = activationCode;
+            document.getElementById('act-share-msg').value =
+                `مرحباً ${fullName}،\nتم تفعيل حسابك في نظام الحضور والانصراف.\nكود الموظف: ${empCode}\nكود التفعيل (مرة واحدة): ${activationCode}\nرابط التفعيل المباشر من موبايلك:\n${link}`;
+            openModal('modal-activation');
+        }
+
+        async function copyActivationMsg() {
+            const txt = document.getElementById('act-share-msg').value;
+            await navigator.clipboard.writeText(txt);
+            showToast('تم نسخ رسالة التفعيل! يمكنك لصقها وإرسالها للموظف الآن.');
+        }
+
         async function submitAddEmployee(e) {
             e.preventDefault();
-            const payload = {
-                employee_code: document.getElementById('e-code').value,
-                full_name: document.getElementById('e-name').value,
-                email: document.getElementById('e-email').value,
-                department: document.getElementById('e-dept').value
-            };
-            const res = await fetch('/api/v1/admin/employees', {
+            const res = await apiFetch('/api/v1/admin/employees', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    employee_code: document.getElementById('e-code').value.trim(),
+                    full_name: document.getElementById('e-name').value.trim(),
+                    email: document.getElementById('e-email').value.trim(),
+                    phone: document.getElementById('e-phone').value.trim() || null,
+                    department: document.getElementById('e-dept').value.trim() || 'العام'
+                })
             });
+            const data = await res.json();
             if (res.ok) {
-                // Auto enroll demo face & bind phone for instant testing!
-                await enrollSampleFace(payload.employee_code);
-                await fetch('/api/v1/admin/devices/register', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        employee_code: payload.employee_code,
-                        device_fingerprint: "hw_fingerprint_" + payload.employee_code,
-                        device_model: "Company iPhone 15",
-                        os_name: "ios",
-                        os_version: "17"
-                    })
-                });
-                showToast("تم تسجيل الموظف وتجهيز بصمته وهاتفه بنجاح!");
                 closeModal('modal-add-employee');
+                showActivationModal(data.employee_code, data.full_name, data.activation_code);
                 loadData();
             } else {
-                const err = await res.json();
-                showToast(err.detail || "حدث خطأ", true);
+                showToast(data.detail || 'فشل إضافة الموظف', true);
             }
+        }
+
+        async function genActivationCode(empCode, fullName) {
+            const res = await apiFetch(`/api/v1/admin/employees/${encodeURIComponent(empCode)}/generate-activation-code`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) showActivationModal(empCode, fullName, data.activation_code);
+            else showToast(data.detail || 'خطأ', true);
+        }
+
+        async function resetEmployeeFace(empCode, fullName) {
+            if (!confirm(`إعادة تعيين بصمة الوجه والهاتف للموظف ${fullName} (${empCode}) وتوليد كود تفعيل جديد؟`)) return;
+            const res = await apiFetch(`/api/v1/admin/employees/${encodeURIComponent(empCode)}/reset-face`, { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                showActivationModal(empCode, fullName, data.activation_code);
+                loadData();
+            } else showToast(data.detail || 'خطأ', true);
         }
 
         async function deleteEmployee(id) {
-            if (!confirm("هل أنت متأكد من حذف هذا الموظف؟")) return;
-            await fetch(`/api/v1/admin/employees/${id}`, {method: 'DELETE'});
-            showToast("تم حذف الموظف");
+            if (!confirm('تعطيل حساب هذا الموظف؟ (تبقى سجلاته التاريخية محفوظة)')) return;
+            const res = await apiFetch(`/api/v1/admin/employees/${id}`, { method: 'DELETE' });
+            if (res.ok) { showToast('تم تعطيل الموظف'); loadData(); }
+        }
+
+        function fillCurrentOfficeIp() {
+            if (detectedPublicIp) document.getElementById('b-ips').value = detectedPublicIp;
+            else showToast('لم يتم رصد IP حالي', true);
+        }
+
+        function getCurrentLocationForBranch() {
+            if (!navigator.geolocation) return showToast('المتصفح لا يدعم GPS', true);
+            navigator.geolocation.getCurrentPosition(pos => {
+                document.getElementById('b-lat').value = pos.coords.latitude;
+                document.getElementById('b-lng').value = pos.coords.longitude;
+                showToast('تم التقاط إحداثياتك الحالية');
+            }, () => showToast('يرجى السماح بصلاحية الموقع', true));
+        }
+
+        async function submitAddBranch(e) {
+            e.preventDefault();
+            const ips = document.getElementById('b-ips').value.split(',').map(s => s.trim()).filter(Boolean);
+            const wifi = document.getElementById('b-wifi').value.split(',').map(s => s.trim()).filter(Boolean);
+            const res = await apiFetch('/api/v1/admin/branches', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('b-name').value.trim(),
+                    code: document.getElementById('b-code').value.trim(),
+                    latitude: parseFloat(document.getElementById('b-lat').value),
+                    longitude: parseFloat(document.getElementById('b-lng').value),
+                    radius_meters: parseInt(document.getElementById('b-radius').value),
+                    allowed_public_ips: ips,
+                    allowed_wifi_bssids: wifi,
+                    require_qr_code: document.getElementById('b-req-qr').checked
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('تم إنشاء الفرع بنجاح');
+                closeModal('modal-add-branch');
+                loadData();
+            } else showToast(data.detail || 'خطأ', true);
+        }
+
+        async function openBranchKiosk(branchCode) {
+            const res = await apiFetch(`/api/v1/admin/branches/${encodeURIComponent(branchCode)}/qr-token`);
+            const data = await res.json();
+            if (res.ok && data.kiosk_path) window.open(data.kiosk_path, '_blank');
+            else showToast('تعذر فتح شاشة QR', true);
+        }
+
+        async function deleteBranch(id) {
+            if (!confirm('تعطيل هذا الفرع؟')) return;
+            await apiFetch(`/api/v1/admin/branches/${id}`, { method: 'DELETE' });
+            showToast('تم تعطيل الفرع');
             loadData();
         }
 
         async function toggleDeviceBlock(id) {
-            const res = await fetch(`/api/v1/admin/devices/${id}/toggle-block`, {method: 'POST'});
+            const res = await apiFetch(`/api/v1/admin/devices/${id}/toggle-block`, { method: 'POST' });
             const data = await res.json();
             showToast(data.message);
             loadData();
         }
 
-        async function clearLogs() {
-            if (!confirm("مسح جميع سجلات الحضور؟")) return;
-            await fetch('/api/v1/admin/attendance-logs/clear', {method: 'DELETE'});
-            showToast("تم مسح السجلات");
-            loadData();
+        async function loadLogsFiltered() {
+            const df = document.getElementById('filter-date-from').value;
+            const dt = document.getElementById('filter-date-to').value;
+            const qs = new URLSearchParams({ limit: '200' });
+            if (df) qs.set('date_from', df);
+            if (dt) qs.set('date_to', dt);
+            const res = await apiFetch('/api/v1/admin/attendance-logs?' + qs.toString());
+            const logs = await res.json();
+            renderLogs(logs);
+            showToast(`تم عرض ${logs.length} سجل`);
         }
 
-        async function clearFrauds() {
-            if (!confirm("مسح جميع تنبيهات التلاعب؟")) return;
-            await fetch('/api/v1/admin/fraud-alerts/clear', {method: 'DELETE'});
-            showToast("تم مسح التنبيهات");
-            loadData();
+        async function exportExcelCsv() {
+            const df = document.getElementById('filter-date-from').value;
+            const dt = document.getElementById('filter-date-to').value;
+            const qs = new URLSearchParams();
+            if (df) qs.set('date_from', df);
+            if (dt) qs.set('date_to', dt);
+            const res = await apiFetch('/api/v1/admin/reports/export?' + qs.toString());
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
-        // Save Settings
+        async function openProtectedPhoto(snapshotPath, name, timeStr) {
+            if (activeObjectUrl) URL.revokeObjectURL(activeObjectUrl);
+            if (snapshotPath.startsWith('data:image/')) {
+                document.getElementById('photo-preview-img').src = snapshotPath;
+            } else {
+                const res = await apiFetch(snapshotPath);
+                if (!res.ok) return showToast('تعذر تحميل الصورة', true);
+                const blob = await res.blob();
+                activeObjectUrl = URL.createObjectURL(blob);
+                document.getElementById('photo-preview-img').src = activeObjectUrl;
+            }
+            document.getElementById('photo-preview-name').innerText = name;
+            document.getElementById('photo-preview-time').innerText = timeStr;
+            openModal('modal-photo-preview');
+        }
+
         async function saveSettings() {
             const payload = {
                 FACE_SIMILARITY_THRESHOLD: parseFloat(document.getElementById('set-face-threshold').value),
+                PASSIVE_LIVENESS_THRESHOLD: parseFloat(document.getElementById('set-liveness-threshold').value),
                 CHALLENGE_EXPIRY_SECONDS: parseInt(document.getElementById('set-nonce-ttl').value),
-                MAX_GPS_ACCURACY_THRESHOLD_METERS: parseFloat(document.getElementById('set-gps-acc').value)
+                MAX_GPS_ACCURACY_THRESHOLD_METERS: parseFloat(document.getElementById('set-gps-acc').value),
+                QR_ROTATION_SECONDS: parseInt(document.getElementById('set-qr-rot').value),
+                REQUIRE_SERVER_FACE_AI: document.getElementById('set-req-ai').checked,
+                REQUIRE_WIFI_OR_BEACON: document.getElementById('set-req-anchor').checked,
+                PREVENT_DUPLICATE_PUNCH: document.getElementById('set-dup-guard').checked
             };
-            const res = await fetch('/api/v1/admin/settings', {
+            const res = await apiFetch('/api/v1/admin/settings', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            if (res.ok) {
-                showToast("تم حفظ إعدادات الأمان بنجاح");
-            }
+            if (res.ok) showToast('تم حفظ الإعدادات بنجاح في قاعدة البيانات');
+            else showToast('فشل الحفظ', true);
         }
 
-        document.getElementById('set-face-threshold').addEventListener('input', (e) => {
+        document.getElementById('set-face-threshold').addEventListener('input', e => {
             document.getElementById('set-face-threshold-val').innerText = e.target.value;
         });
 
-        // ======================== LIVE SIMULATION LAB ========================
-        async function executeTest(mode) {
-            const output = document.getElementById('sim-output');
-            const empCode = document.getElementById('sim-employee-select').value;
-            if (!empCode) {
-                showToast("يرجى اختيار موظف أولاً", true);
-                return;
-            }
-
-            output.classList.remove('hidden');
-            output.className = 'mt-6 p-5 rounded-2xl text-xs bg-slate-800 text-slate-300 border border-slate-700 leading-relaxed font-mono';
-            output.innerText = `1. جارٍ طلب رمز التحدي الحركي الأمني (40s Nonce) للموظف ${empCode}...`;
-
+        // Boot: verify existing JWT session
+        (async function boot() {
+            if (!adminToken) return;
             try {
-                // Determine Device Fingerprint
-                let deviceFp = "unregistered_attacker_device_fingerprint";
-                if (mode !== 'WRONG_DEVICE') {
-                    const empObj = currentEmployees.find(e => e.employee_code === empCode);
-                    const boundDev = currentDevices.find(d => d.id === empObj?.bound_device_id);
-                    if (boundDev && !boundDev.is_blocked) {
-                        deviceFp = boundDev.device_fingerprint;
-                    } else {
-                        deviceFp = 'e8395e48709563d5d3b8a5b7c59ff0dc69e5c57091c0cae422e8b6a589ba980e';
-                    }
-                }
-
-                // 1. Request Challenge
-                const chRes = await fetch('/api/v1/attendance/challenge', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        employee_code: empCode,
-                        device_fingerprint: deviceFp
-                    })
-                });
-
-                if (!chRes.ok) {
-                    const err = await chRes.json();
-                    output.className = 'mt-6 p-5 rounded-2xl text-xs bg-rose-950/80 text-rose-200 border border-rose-700 leading-relaxed';
-                    output.innerHTML = `
-                        <h4 class="text-sm font-bold text-rose-400 mb-1">🚨 تم إفشال الطلب في المرحلة الأولى (Device Check)!</h4>
-                        <p><strong>السبب:</strong> ${err.detail}</p>
-                        <p class="mt-2 text-[11px] text-slate-400">النظام رفض إصدار كود الأمان لأن الهاتف غير مصرح له بتسجيل الحضور لهذا الموظف (منع البصم بالنيابة).</p>
-                    `;
+                const res = await apiFetch('/api/v1/auth/me');
+                if (res.ok) {
+                    const me = await res.json();
+                    document.getElementById('admin-welcome').innerText = me.full_name || me.username;
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('app-shell').classList.remove('hidden');
                     loadData();
-                    return;
                 }
-
-                const chData = await chRes.json();
-                output.innerText += `\n2. تم إصدار Nonce: ${chData.nonce.slice(0, 16)}... | الحركات المطلوبة: [${chData.expected_actions.join(', ')}]`;
-
-                // 2. Fetch enrolled face vector
-                const faceRes = await fetch(`/api/v1/admin/employees/${empCode}/face-vector`);
-                let faceEmbedding;
-                if (faceRes.ok) {
-                    const fData = await faceRes.json();
-                    faceEmbedding = fData.face_embedding;
-                } else {
-                    faceEmbedding = new Array(512).fill(0.044);
-                }
-
-                // If simulating Face Spoof (wrong face or photo)
-                if (mode === 'FACE_SPOOF') {
-                    // Random face vector that won't match
-                    faceEmbedding = new Array(512).fill(0.01);
-                }
-
-                // Coordinates & Geo
-                const targetBranch = currentBranches[0] || {latitude: 30.0444, longitude: 31.2357};
-                let lat = targetBranch.latitude + 0.00001; // ~1 meter from branch
-                let lng = targetBranch.longitude + 0.00001;
-                let isMock = false;
-                let livenessScore = 0.96;
-
-                if (mode === 'FAKE_GPS') {
-                    isMock = true; // Flag from native Android isMocked
-                    lat = 30.9000;
-                    lng = 31.8000;
-                } else if (mode === 'FACE_SPOOF') {
-                    livenessScore = 0.45; // Below 0.70 threshold (detected as paper or screen replay)
-                }
-
-                output.innerText += `\n3. فحص القياسات الحيوية والنطاق الجغرافي والمرساة الفيزيائية...`;
-
-                // 3. Punch
-                const punchRes = await fetch('/api/v1/attendance/punch', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        employee_code: empCode,
-                        punch_type: 'CHECK_IN',
-                        nonce: chData.nonce,
-                        device_fingerprint: deviceFp,
-                        face_embedding: faceEmbedding,
-                        face_snapshot: (mode === 'LEGIT' 
-                            ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=240&q=80' 
-                            : (mode === 'FACE_SPOOF' ? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=240&q=80' : null)),
-                        liveness_proof: {
-                            actions_performed: chData.expected_actions,
-                            motion_timestamp_ms: [Date.now()],
-                            liveness_score: livenessScore
-                        },
-                        latitude: lat,
-                        longitude: lng,
-                        gps_accuracy_meters: mode === 'FAKE_GPS' ? 90.0 : 6.0,
-                        is_mock_location: isMock,
-                        wifi_bssid: '00:14:22:01:23:45',
-                        client_timestamp: new Date().toISOString()
-                    })
-                });
-
-                const pData = await punchRes.json();
-
-                if (pData.success) {
-                    output.className = 'mt-6 p-5 rounded-2xl text-xs bg-emerald-950/80 text-emerald-200 border border-emerald-600 leading-relaxed';
-                    output.innerHTML = `
-                        <h4 class="text-base font-bold text-emerald-400 mb-1">🎉 ${pData.message}</h4>
-                        <div class="space-y-1 mt-2 text-slate-300">
-                            <p><strong>الموظف:</strong> ${pData.employee_name}</p>
-                            <p><strong>الفرع:</strong> ${pData.telemetry_details?.branch} (المسافة: ${pData.telemetry_details?.distance_meters} متر)</p>
-                            <p><strong>تطابق ملامح الوجه (Cosine Similarity):</strong> ${((pData.telemetry_details?.face_similarity || 1) * 100).toFixed(1)}%</p>
-                            <p><strong>توقيت السيرفر الرسمي:</strong> ${formatLocalTime(pData.server_timestamp)}</p>
-                        </div>
-                    `;
-                } else {
-                    output.className = 'mt-6 p-5 rounded-2xl text-xs bg-rose-950/80 text-rose-200 border border-rose-700 leading-relaxed';
-                    output.innerHTML = `
-                        <h4 class="text-base font-bold text-rose-400 mb-1">🚨 تم إفشال ورفض البصمة وكشف التلاعب فوراً!</h4>
-                        <p class="font-bold text-white mt-1">السبب: <span class="text-rose-300">${pData.rejection_reason}</span></p>
-                        <p class="mt-2 text-[11px] text-slate-400">تم تسجيل هذا الحادث فوراً في مسار التدقيق (Fraud Alerts) مع تحديد التوقيت والـ IP لإدارة الشركة.</p>
-                    `;
-                }
-
-                loadData();
-
-            } catch (err) {
-                output.className = 'mt-6 p-5 rounded-2xl text-xs bg-rose-950 text-rose-300';
-                output.innerText = 'حدث خطأ: ' + err.message;
-            }
-        }
-
-        // Initialize on load
-        loadData();
+            } catch (_) { }
+        })();
     </script>
 </body>
+
 </html>

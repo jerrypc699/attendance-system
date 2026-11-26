@@ -2,15 +2,51 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+
+# ----------------- AUTH SCHEMAS -----------------
+class AdminLoginRequest(BaseModel):
+    username: str = Field(..., min_length=2, max_length=80)
+    password: str = Field(..., min_length=4, max_length=128)
+
+
+class AdminLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_seconds: int
+    username: str
+    full_name: str
+    role: str
+
+
+class AdminChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
 # ----------------- BRANCH SCHEMAS -----------------
 class BranchCreate(BaseModel):
-    name: str
-    code: str
-    latitude: float
-    longitude: float
-    radius_meters: int = Field(default=80, ge=10, le=500)
+    name: str = Field(..., min_length=2, max_length=150)
+    code: str = Field(..., min_length=2, max_length=50)
+    latitude: float = Field(..., ge=-90.0, le=90.0)
+    longitude: float = Field(..., ge=-180.0, le=180.0)
+    radius_meters: int = Field(default=100, ge=10, le=2000)
     allowed_wifi_bssids: List[str] = []
     allowed_beacon_uuids: List[str] = []
+    allowed_public_ips: List[str] = []
+    require_qr_code: bool = False
+
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    latitude: Optional[float] = Field(default=None, ge=-90.0, le=90.0)
+    longitude: Optional[float] = Field(default=None, ge=-180.0, le=180.0)
+    radius_meters: Optional[int] = Field(default=None, ge=10, le=2000)
+    allowed_wifi_bssids: Optional[List[str]] = None
+    allowed_beacon_uuids: Optional[List[str]] = None
+    allowed_public_ips: Optional[List[str]] = None
+    require_qr_code: Optional[bool] = None
+    is_active: Optional[bool] = None
+
 
 class BranchResponse(BranchCreate):
     model_config = ConfigDict(from_attributes=True)
@@ -18,57 +54,58 @@ class BranchResponse(BranchCreate):
     is_active: bool
     created_at: datetime
 
+
 # ----------------- DEVICE SCHEMAS -----------------
 class DeviceRegisterRequest(BaseModel):
     employee_code: str
     device_fingerprint: str
     device_model: str
-    os_name: str # 'android' | 'ios'
+    os_name: str
     os_version: str
     public_key: Optional[str] = None
-    integrity_token: Optional[str] = None # Play Integrity or App Attest token
+    integrity_token: Optional[str] = None
+
 
 class DeviceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     device_fingerprint: str
+    device_model: str
+    os_name: str
+    os_version: str
     is_trusted: bool
     is_blocked: bool
+    blocked_reason: Optional[str] = None
     registered_at: datetime
+    last_seen_at: Optional[datetime] = None
+
 
 # ----------------- EMPLOYEE SCHEMAS -----------------
 class EmployeeCreate(BaseModel):
-    employee_code: str
-    full_name: str
-    email: str
+    employee_code: str = Field(..., min_length=2, max_length=50)
+    full_name: str = Field(..., min_length=2, max_length=150)
+    email: str = Field(..., min_length=4, max_length=150)
     phone: Optional[str] = None
     department: Optional[str] = None
+
 
 class EmployeeEnrollFace(BaseModel):
     employee_code: str
-    face_embedding: List[float] = Field(..., description="512-dimensional face embedding from ArcFace/InsightFace")
+    face_embedding: Optional[List[float]] = None
+    face_image: Optional[str] = None
+
 
 class MobileEnrollRequest(BaseModel):
     employee_code: str
-    device_fingerprint: str
-    device_model: str = "Mobile Phone"
-    os_name: str = "android" # 'android' | 'ios'
-    os_version: str = "14"
-    face_embedding: List[float]
-    liveness_score: float = Field(default=0.95, ge=0.0, le=1.0)
-
-class RegisterAndEnrollRequest(BaseModel):
-    employee_code: str
-    full_name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    department: Optional[str] = None
-    device_fingerprint: str
+    activation_code: str = Field(..., min_length=4, max_length=64, description="One-time activation code issued by HR")
+    device_fingerprint: str = Field(..., min_length=8, max_length=128)
     device_model: str = "Mobile Phone"
     os_name: str = "android"
     os_version: str = "14"
-    face_embedding: List[float]
+    face_image: Optional[str] = Field(default=None, description="Live camera JPEG base64 Data URL for server-side AI extraction")
+    face_embedding: Optional[List[float]] = Field(default=None, description="Optional fallback embedding when server AI is disabled in tests")
     liveness_score: float = Field(default=0.95, ge=0.0, le=1.0)
+
 
 class EmployeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -76,15 +113,20 @@ class EmployeeResponse(BaseModel):
     employee_code: str
     full_name: str
     email: str
+    phone: Optional[str] = None
     department: Optional[str] = None
     bound_device_id: Optional[str] = None
     is_face_enrolled: bool
+    face_model_version: Optional[str] = None
     is_active: bool
+
 
 # ----------------- LIVENESS & CHALLENGE SCHEMAS -----------------
 class ChallengeRequest(BaseModel):
     employee_code: str
     device_fingerprint: str
+    device_token: Optional[str] = None
+
 
 class ChallengeResponse(BaseModel):
     nonce: str
@@ -92,41 +134,47 @@ class ChallengeResponse(BaseModel):
     expires_in_seconds: int
     expires_at: datetime
 
+
 # ----------------- PUNCH IN/OUT VERIFICATION REQUEST -----------------
 class ActiveLivenessProof(BaseModel):
     actions_performed: List[str]
-    motion_timestamp_ms: List[int]
-    liveness_score: float = Field(..., ge=0.0, le=1.0) # Passive score from ML Model
+    motion_timestamp_ms: List[int] = []
+    liveness_score: float = Field(default=0.0, ge=0.0, le=1.0)
+
 
 class PunchVerificationRequest(BaseModel):
     employee_code: str
     punch_type: str = Field(..., pattern="^(CHECK_IN|CHECK_OUT)$")
     nonce: str
-    
+
     # Device telemetry
     device_fingerprint: str
+    device_token: Optional[str] = None
     device_signature: Optional[str] = None
-    
-    # Biometric Telemetry
-    face_embedding: List[float]
+
+    # Biometric Telemetry (Server-Side AI uses face_snapshot + liveness_frames!)
+    face_embedding: Optional[List[float]] = None
     liveness_proof: ActiveLivenessProof
-    face_snapshot: Optional[str] = None # Base64 Data URL or image snapshot taken from camera at punch time
+    face_snapshot: Optional[str] = None
+    liveness_frames: List[str] = Field(default_factory=list, description="2-3 sequential camera frames captured during active liveness challenge")
 
     # Geo Telemetry
-    latitude: float
-    longitude: float
-    gps_accuracy_meters: float
+    latitude: float = Field(..., ge=-90.0, le=90.0)
+    longitude: float = Field(..., ge=-180.0, le=180.0)
+    gps_accuracy_meters: float = Field(..., ge=0.0)
     is_mock_location: bool = Field(..., description="Flag from native Android isMock() or iOS indicator")
 
     # Physical Anchor Telemetry
     wifi_bssid: Optional[str] = None
     beacon_uuid: Optional[str] = None
-    
+    qr_token: Optional[str] = None
+
     client_timestamp: datetime
+
 
 class PunchVerificationResponse(BaseModel):
     success: bool
-    status: str # 'APPROVED' | 'REJECTED'
+    status: str  # 'APPROVED' | 'REJECTED'
     punch_id: Optional[str] = None
     employee_name: Optional[str] = None
     server_timestamp: datetime

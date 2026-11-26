@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شاشة QR مدخل الشركة | نظام الحضور الذكي</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Cairo', sans-serif; }</style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center justify-center p-6">
+    <div class="max-w-lg w-full bg-slate-900 border border-indigo-800/60 rounded-3xl p-8 text-center shadow-2xl space-y-6">
+        <div class="space-y-1">
+            <span class="inline-block px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 text-xs font-bold">
+                🛡️ كود حضور متغير ومشفّر تلقائياً
+            </span>
+            <h1 id="branch-title" class="text-2xl font-black text-white mt-2">جاري التحميل...</h1>
+            <p id="live-clock" class="text-lg font-mono text-emerald-400 font-bold">--:--:--</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-3xl inline-flex items-center justify-center shadow-2xl mx-auto">
+            <div id="qrcode" class="w-64 h-64 flex items-center justify-center"></div>
+        </div>
+
+        <div class="space-y-2">
+            <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+                <div id="progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full transition-all duration-500" style="width: 100%"></div>
+            </div>
+            <p class="text-xs text-slate-400">
+                يتجدد الكود تلقائياً خلال <span id="countdown" class="text-white font-mono font-bold">--</span> ثانية
+            </p>
+            <p id="error-msg" class="hidden text-xs text-rose-400 font-bold bg-rose-950/60 p-3 rounded-xl border border-rose-800"></p>
+        </div>
+
+        <p class="text-[11px] text-slate-500">
+            امسح الكود من تطبيق الحضور (iPhone / Android) قبل الضغط على تسجيل الحضور أو الانصراف. تصوير الكود وإرساله خارج المقر لا يعمل لأن الكود ينتهي خلال ثوانٍ.
+        </p>
+    </div>
+
+    <script>
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const branchCode = decodeURIComponent(pathParts[pathParts.length - 1] || '');
+        const params = new URLSearchParams(window.location.search);
+        const kioskKey = params.get('key') || '';
+        let qrInstance = null;
+        let remaining = 20;
+        let period = 20;
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('live-clock').innerText =
+                now.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) +
+                '  •  ' +
+                now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        async function refreshQR() {
+            const errEl = document.getElementById('error-msg');
+            if (!kioskKey) {
+                errEl.classList.remove('hidden');
+                errEl.innerText = 'مفتاح الشاشة مفقود! افتح هذه الصفحة من زر "شاشة QR" داخل لوحة تحكم الأدمن.';
+                return;
+            }
+            try {
+                const res = await fetch(`/api/v1/attendance/kiosk-qr/${encodeURIComponent(branchCode)}?key=${encodeURIComponent(kioskKey)}`);
+                const data = await res.json();
+                if (!res.ok) {
+                    errEl.classList.remove('hidden');
+                    errEl.innerText = data.detail || 'تعذر تحديث كود الـ QR';
+                    return;
+                }
+                errEl.classList.add('hidden');
+                document.getElementById('branch-title').innerText = `${data.branch_name} (${data.branch_code})`;
+                period = data.rotation_seconds || 20;
+                remaining = data.expires_in_seconds || period;
+
+                const box = document.getElementById('qrcode');
+                box.innerHTML = '';
+                qrInstance = new QRCode(box, {
+                    text: data.qr_token,
+                    width: 256,
+                    height: 256,
+                    colorDark: '#0f172a',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
+            } catch (e) {
+                errEl.classList.remove('hidden');
+                errEl.innerText = 'انقطع الاتصال بالسيرفر، جارٍ إعادة المحاولة...';
+            }
+        }
+
+        setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                refreshQR();
+            } else {
+                document.getElementById('countdown').innerText = remaining;
+                const pct = Math.max(0, Math.min(100, (remaining / period) * 100));
+                document.getElementById('progress-bar').style.width = pct + '%';
+            }
+        }, 1000);
+
+        refreshQR();
+    </script>
+</body>
+</html>
+
