@@ -1,9 +1,12 @@
 import csv
 import io
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
@@ -39,7 +42,7 @@ def _iso_utc(ts: Optional[datetime]) -> Optional[str]:
     return ts.replace(tzinfo=timezone.utc).isoformat() if ts.tzinfo is None else ts.isoformat()
 
 
-# ----------------- NETWORK & KIOSK HELPERS -----------------
+# ----------------- NETWORK & LOCATION HELPERS -----------------
 @router.get("/network-info")
 def get_admin_network_info(request: Request):
     """Returns admin's detected public IP so they can whitelist the office Wi-Fi in one click."""
@@ -50,13 +53,124 @@ def get_admin_network_info(request: Request):
     }
 
 
+def _extract_lat_lng_from_text(text: str):
+    """Extracts (lat, lng) from Google Maps URLs (exact pin !3d/!4d first, then @lat,lng, then q=/ll= or plain coords)."""
+    # 1. Exact place pin in Google Maps data URL: !3d30.15644!4d31.81966
+    pin_matches = re.findall(r"!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)", text)
+    if pin_matches:
+        lat, lng = float(pin_matches[-1][0]), float(pin_matches[-1][1])
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
+
+    # 2. Query / search params: ?q=30.15,31.81 or ll=30.15,31.81 or /search/30.15,+31.81
+    q_match = re.search(r"(?:[?&](?:q|ll|query)=|/search/)(-?\d+\.\d+)\s*,\s*\+?(-?\d+\.\d+)", text)
+    if q_match:
+        lat, lng = float(q_match.group(1)), float(q_match.group(2))
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
+
+    # 3. Viewport center in Google Maps URL: /@30.15644,31.81966,17z
+    at_match = re.search(r"@(-?\d+\.\d+),(-?\d+\.\d+)", text)
+    if at_match:
+        lat, lng = float(at_match.group(1)), float(at_match.group(2))
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
+
+    # 4. Plain coordinates pasted directly: 30.15644, 31.81966
+    plain = re.search(r"(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})", text)
+    if plain:
+        lat, lng = float(plain.group(1)), float(plain.group(2))
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            return lat, lng
+
+    return None
+
+
+@router.post("/resolve-maps-url")
+def resolve_google_maps_url(payload: dict):
+    """Resolves full or short Google Maps share links (including maps.app.goo.gl) into exact (lat, lng)."""
+    raw = str(payload.get("url") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="يرجى لصق رابط Google Maps أو الإحداثيات.")
+
+    coords = _extract_lat_lng_from_text(raw)
+    if coords:
+        return {"latitude": coords[0], "longitude": coords[1], "resolved_url": raw}
+
+    # Allow server-side redirect expansion ONLY for official Google Maps shortlink domains (SSRF-safe)
+    if raw.startswith("http://") or raw.startswith("https://"):
+        parsed = urlparse(raw)
+        host = (parsed.hostname or "").lower()
+        allowed_hosts = ("maps.app.goo.gl", "goo.gl", "maps.google.com", "www.google.com", "google.com")
+        if host not in allowed_hosts and not host.endswith(".google.com"):
+            raise HTTPException(status_code=400, detail="الرابط يجب أن يكون رابط خرائط جوجل (Google Maps) فقط.")
+        try:
+            with httpx.Client(follow_redirects=True, timeout=10.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
+                resp = client.get(raw)
+                final_url = str(resp.url)
+                coords = _extract_lat_lng_from_text(final_url) or _extract_lat_lng_from_text(resp.text[:80000])
+                if coords:
+                    return {"latitude": coords[0], "longitude": coords[1], "resolved_url": final_url}
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"تعذر قراءة رابط الخريطة المختصر: {exc}")
+
+    raise HTTPException(
+        status_code=400,
+        detail="لم يتم العثور على موقع في الرابط. انسخ الرابط من شريط العنوان في Google Maps أو اضغط مشاركة ثم نسخ الرابط.",
+    )
+
+
+@router.get("/geocode-search")
+def geocode_place_search(q: str = Query(..., min_length=2, max_length=200)):
+    """Searches addresses/places via OpenStreetMap Nominatim so admins can find branches by name."""
+    try:
+        with httpx.Client(
+            timeout=10.0,
+            headers={"User-Agent": "WalaaHRAttendance/2.0 (admin-branch-picker)"},
+        ) as client:
+            resp = client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": q.strip(), "format": "json", "limit": 5, "accept-language": "ar,en"},
+            )
+            if resp.status_code != 200:
+                return []
+            items = resp.json()
+            return [
+                {
+                    "display_name": it.get("display_name", ""),
+                    "latitude": float(it["lat"]),
+                    "longitude": float(it["lon"]),
+                }
+                for it in items
+                if "lat" in it and "lon" in it
+            ]
+    except Exception:
+        return []
+
+
 # ----------------- BRANCHES -----------------
 @router.post("/branches", response_model=BranchResponse, status_code=status.HTTP_201_CREATED)
 def create_branch(payload: BranchCreate, db: Session = Depends(get_db)):
     code = payload.code.strip().upper()
     existing = db.query(Branch).filter(Branch.code == code).first()
     if existing:
-        raise HTTPException(status_code=400, detail="يوجد فرع بنفس الكود بالفعل.")
+        if not existing.is_active:
+            # Reactivate and update previously soft-deleted branch code cleanly
+            existing.name = payload.name.strip()
+            existing.latitude = payload.latitude
+            existing.longitude = payload.longitude
+            existing.radius_meters = payload.radius_meters
+            existing.allowed_wifi_bssids = [b.strip() for b in payload.allowed_wifi_bssids if b.strip()]
+            existing.allowed_beacon_uuids = [b.strip() for b in payload.allowed_beacon_uuids if b.strip()]
+            existing.allowed_public_ips = [ip.strip() for ip in payload.allowed_public_ips if ip.strip()]
+            existing.require_qr_code = payload.require_qr_code
+            if not existing.qr_secret:
+                existing.qr_secret = secrets.token_hex(32)
+            existing.is_active = True
+            db.commit()
+            db.refresh(existing)
+            return existing
+        raise HTTPException(status_code=400, detail="يوجد فرع نشط بنفس الكود بالفعل — اختر كوداً آخر (مثل BR-2).")
 
     branch = Branch(
         name=payload.name.strip(),
