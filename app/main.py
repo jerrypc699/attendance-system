@@ -140,6 +140,7 @@ KIOSK_FILE = os.path.join(STATIC_DIR, "kiosk.html")
 MANIFEST_FILE = os.path.join(STATIC_DIR, "manifest.json")
 SW_FILE = os.path.join(STATIC_DIR, "sw.js")
 APK_FILE = os.path.join(STATIC_DIR, "app-release.apk")
+IPA_FILE = os.path.join(STATIC_DIR, "WalaaHR-iOS-unsigned.ipa")
 
 
 @app.get("/download-apk")
@@ -149,9 +150,21 @@ def download_apk():
         return FileResponse(
             APK_FILE,
             media_type="application/vnd.android.package-archive",
-            filename="AttendanceApp.apk",
+            filename="WalaaHR-Android.apk",
         )
     return HTMLResponse("<h2>ملف الـ APK غير متوفر محلياً — يرجى تحميله من رابط الإصدارات</h2>", status_code=404)
+
+
+@app.get("/download-ios")
+@app.get("/WalaaHR-iOS.ipa")
+def download_ios_ipa():
+    if os.path.exists(IPA_FILE):
+        return FileResponse(
+            IPA_FILE,
+            media_type="application/octet-stream",
+            filename="WalaaHR-iOS-unsigned.ipa",
+        )
+    return HTMLResponse("<h2>ملف الـ IPA غير متوفر محلياً بعد</h2>", status_code=404)
 
 
 @app.get("/manifest.json")

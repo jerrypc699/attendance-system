@@ -1,4 +1,4 @@
-name: Build Production Android APK & AAB
+name: Build Android APK & iOS IPA
 
 on:
   push:
@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       api_url:
-        description: 'Production HTTPS API URL (e.g. https://walaahr.dpdns.org)'
+        description: 'Production HTTPS API URL'
         required: true
         default: 'https://walaahr.dpdns.org'
       app_id:
-        description: 'Unique Android Application ID (e.g. com.walaahr.attendance)'
+        description: 'Unique Bundle / Application ID'
         required: false
         default: 'com.walaahr.attendance'
 
@@ -21,13 +21,14 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-android:
+    name: Build Android Release APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
@@ -42,52 +43,165 @@ jobs:
       - name: Generate Clean Android Scaffolding
         working-directory: ./flutter_app
         env:
-          APP_ID: ${{ github.event.inputs.app_id || vars.ANDROID_APP_ID || 'com.yourcompany.attendance' }}
+          APP_ID: ${{ github.event.inputs.app_id || 'com.walaahr.attendance' }}
         run: |
           ORG_PREFIX="${APP_ID%.*}"
-          PROJ_NAME="${APP_ID##*.}"
           rm -rf android
           flutter create --platforms=android --org "$ORG_PREFIX" --project-name attendance_mobile_app .
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="[^"]*"/android:label="الحضور الذكي"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's/minSdk = .*/minSdk = 21/' android/app/build.gradle || true
-          sed -i 's/minSdkVersion .*/minSdkVersion 21/' android/app/build.gradle || true
+          python3 - <<'PYEOF'
+          from pathlib import Path
+          import re
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          txt = manifest.read_text(encoding="utf-8")
+          perms = """    <uses-permission android:name="android.permission.CAMERA" />
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.INTERNET" />
+          """
+          if "android.permission.CAMERA" not in txt:
+              txt = txt.replace("<application", perms + "    <application", 1)
+          txt = re.sub(r'android:label="[^"]*"', 'android:label="ولاء للحضور"', txt)
+          manifest.write_text(txt, encoding="utf-8")
+
+          for gradle_name in ("android/app/build.gradle", "android/app/build.gradle.kts"):
+              gp = Path(gradle_name)
+              if gp.exists():
+                  g = gp.read_text(encoding="utf-8")
+                  g = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 21', g)
+                  g = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', g)
+                  g = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 34', g)
+                  g = re.sub(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 34', g)
+                  gp.write_text(g, encoding="utf-8")
+          PYEOF
 
       - name: Configure Optional Release Signing Keystore
         working-directory: ./flutter_app
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
-          cat <<EOF > android/key.properties
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+            cat <<EOF > android/key.properties
           storePassword=$KEYSTORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           keyAlias=$KEY_ALIAS
           storeFile=upload-keystore.jks
           EOF
+            echo "Release keystore configured."
+          else
+            echo "No KEYSTORE_BASE64 secret provided; building with default signing."
+          fi
 
-      - name: Get Dependencies & Build Release APK
+      - name: Get Dependencies & Build Android APK
         working-directory: ./flutter_app
         env:
-          API_URL: ${{ github.event.inputs.api_url || vars.PRODUCTION_API_URL || 'https://walaahr.dpdns.org' }}
+          API_URL: ${{ github.event.inputs.api_url || 'https://walaahr.dpdns.org' }}
         run: |
           flutter pub get
           flutter build apk --release --dart-define=API_URL="$API_URL"
+          cp build/app/outputs/flutter-apk/app-release.apk build/WalaaHR-Android.apk
 
-      - name: Upload APK Artifact
+      - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: attendance-app-v2-${{ github.run_number }}
-          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          name: WalaaHR-Android-APK
+          path: flutter_app/build/WalaaHR-Android.apk
 
-      - name: Publish Versioned GitHub Release
+  build-ios:
+    name: Build iPhone IPA (iOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: 'stable'
+
+      - name: Generate Clean iOS Scaffolding & Privacy Permissions
+        working-directory: ./flutter_app
+        env:
+          APP_ID: ${{ github.event.inputs.app_id || 'com.walaahr.attendance' }}
+        run: |
+          ORG_PREFIX="${APP_ID%.*}"
+          rm -rf ios
+          flutter create --platforms=ios --org "$ORG_PREFIX" --project-name attendance_mobile_app .
+          python3 - <<'PYEOF'
+          from pathlib import Path
+          import plistlib
+
+          plist_path = Path("ios/Runner/Info.plist")
+          with plist_path.open("rb") as f:
+              data = plistlib.load(f)
+          data["CFBundleDisplayName"] = "ولاء للحضور"
+          data["NSCameraUsageDescription"] = "يحتاج التطبيق إلى الكاميرا الأمامية للتحقق من بصمة الوجه والحيوية ومسح كود QR المدخل."
+          data["NSLocationWhenInUseUsageDescription"] = "يحتاج التطبيق إلى موقعك الجغرافي للتأكد من تواجدك داخل نطاق مقر الشركة عند تسجيل الحضور."
+          data["NSLocationAlwaysAndWhenInUseUsageDescription"] = "يحتاج التطبيق إلى موقعك الجغرافي لتأكيد التواجد داخل مقر الشركة."
+          with plist_path.open("wb") as f:
+              plistlib.dump(data, f)
+
+          pbx = Path("ios/Runner.xcodeproj/project.pbxproj")
+          t = pbx.read_text(encoding="utf-8")
+          t = t.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
+          pbx.write_text(t, encoding="utf-8")
+          PYEOF
+
+      - name: Get Dependencies & Build iOS Release (.ipa)
+        working-directory: ./flutter_app
+        env:
+          API_URL: ${{ github.event.inputs.api_url || 'https://walaahr.dpdns.org' }}
+        run: |
+          flutter pub get
+          if [ -f ios/Podfile ]; then
+            sed -i '' "s/^# *platform :ios.*/platform :ios, '13.0'/" ios/Podfile || true
+            sed -i '' "s/^platform :ios.*/platform :ios, '13.0'/" ios/Podfile || true
+          fi
+          flutter build ios --release --no-codesign --dart-define=API_URL="$API_URL"
+          mkdir -p build/ipa_stage/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ipa_stage/Payload/Runner.app
+          cd build/ipa_stage
+          zip -qry ../WalaaHR-iOS-unsigned.ipa Payload
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WalaaHR-iOS-IPA
+          path: flutter_app/build/WalaaHR-iOS-unsigned.ipa
+
+  release:
+    name: Publish Android APK & iOS IPA to GitHub Releases
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: WalaaHR-Android-APK
+          path: release_assets
+
+      - name: Download iOS IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: WalaaHR-iOS-IPA
+          path: release_assets
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0.${{ github.run_number }}
-          name: "Attendance System APK v2.0.${{ github.run_number }}"
-          body: "Production Release APK for the Anti-Cheat Biometric Attendance System (Server-Side AI + Anti-Mock GPS + QR)."
-          files: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          name: "Walaa HR Attendance Apps v2.0.${{ github.run_number }} (Android APK + iOS IPA)"
+          body: |
+            ## تطبيق ولاء للحضور والانصراف الذكي (https://walaahr.dpdns.org)
+            - **Android:** `WalaaHR-Android.apk` (تثبيت مباشر)
+            - **iPhone (iOS):** `WalaaHR-iOS-unsigned.ipa` (جاهز للتوقيع عبر Apple Developer / TestFlight أو Sideloadly / AltStore)
+          files: |
+            release_assets/WalaaHR-Android.apk
+            release_assets/WalaaHR-iOS-unsigned.ipa

@@ -15,6 +15,7 @@ flutter_app/.dart_tool/
 .idea/
 .vscode/
 app/static/*.apk
+app/static/*.ipa
 uploads/
 backups/
 models/*.onnx
