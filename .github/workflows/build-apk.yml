@@ -9,13 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       api_url:
-        description: 'Production HTTPS API URL (e.g. https://attendance.yourcompany.com)'
+        description: 'Production HTTPS API URL (e.g. https://walaahr.dpdns.org)'
         required: true
-        default: 'https://attendance.yourcompany.com'
+        default: 'https://walaahr.dpdns.org'
       app_id:
-        description: 'Unique Android Application ID (e.g. com.yourcompany.attendance)'
+        description: 'Unique Android Application ID (e.g. com.walaahr.attendance)'
         required: false
-        default: 'com.yourcompany.attendance'
+        default: 'com.walaahr.attendance'
 
 permissions:
   contents: write
@@ -73,7 +73,7 @@ jobs:
       - name: Get Dependencies & Build Release APK
         working-directory: ./flutter_app
         env:
-          API_URL: ${{ github.event.inputs.api_url || vars.PRODUCTION_API_URL || 'https://attendance.yourcompany.com' }}
+          API_URL: ${{ github.event.inputs.api_url || vars.PRODUCTION_API_URL || 'https://walaahr.dpdns.org' }}
         run: |
           flutter pub get
           flutter build apk --release --dart-define=API_URL="$API_URL"

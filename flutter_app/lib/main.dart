@@ -7,7 +7,7 @@ import 'security_checker.dart';
 
 const String kDefaultApiUrl = String.fromEnvironment(
   'API_URL',
-  defaultValue: 'https://attendance.yourcompany.com',
+  defaultValue: 'https://walaahr.dpdns.org',
 );
 
 List<CameraDescription> cameras = [];
