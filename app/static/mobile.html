@@ -397,7 +397,7 @@
                     warnBox.classList.add('hidden');
                     const acc = Math.round(pos.coords.accuracy);
                     const color = acc <= 50 ? 'emerald' : 'amber';
-                    gpsLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-${color}-400"></span><span class="text-${color}-400">📍 ${acc}م</span>`;
+                    gpsLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-${color}-400"></span><span class="text-${color}-400">دقة GPS: ${acc}م</span>`;
                 },
                 (err) => {
                     currentPos = null;
@@ -515,6 +515,11 @@
                 const res = await fetch(`/api/v1/attendance/status/${encodeURIComponent(code)}`);
                 const data = await res.json();
                 if (!res.ok) {
+                    if (res.status === 404 && localStorage.getItem('last_employee_code') === code) {
+                        localStorage.removeItem('last_employee_code');
+                        localStorage.removeItem('last_employee_name');
+                        document.getElementById('quick-emp-container').classList.add('hidden');
+                    }
                     errBox.classList.remove('hidden');
                     errBox.innerText = data.detail || 'لم يتم العثور على الموظف.';
                     return;

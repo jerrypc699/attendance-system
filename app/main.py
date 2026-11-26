@@ -143,8 +143,8 @@ APK_FILE = os.path.join(STATIC_DIR, "app-release.apk")
 IPA_FILE = os.path.join(STATIC_DIR, "WalaaHR-iOS-unsigned.ipa")
 
 
-@app.get("/download-apk")
-@app.get("/app-release.apk")
+@app.api_route("/download-apk", methods=["GET", "HEAD"])
+@app.api_route("/app-release.apk", methods=["GET", "HEAD"])
 def download_apk():
     if os.path.exists(APK_FILE):
         return FileResponse(
@@ -155,8 +155,8 @@ def download_apk():
     return HTMLResponse("<h2>ملف الـ APK غير متوفر محلياً — يرجى تحميله من رابط الإصدارات</h2>", status_code=404)
 
 
-@app.get("/download-ios")
-@app.get("/WalaaHR-iOS.ipa")
+@app.api_route("/download-ios", methods=["GET", "HEAD"])
+@app.api_route("/WalaaHR-iOS.ipa", methods=["GET", "HEAD"])
 def download_ios_ipa():
     if os.path.exists(IPA_FILE):
         return FileResponse(
@@ -196,7 +196,7 @@ def serve_pwa_icon(icon_name: str):
 def serve_dashboard():
     if os.path.exists(DASHBOARD_FILE):
         with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+            return HTMLResponse(content=f.read(), headers={"Cache-Control": "no-store"})
     return HTMLResponse("<h2>Dashboard file not found</h2>", status_code=404)
 
 
@@ -204,7 +204,7 @@ def serve_dashboard():
 def serve_mobile():
     if os.path.exists(MOBILE_FILE):
         with open(MOBILE_FILE, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+            return HTMLResponse(content=f.read(), headers={"Cache-Control": "no-store"})
     return HTMLResponse("<h2>Mobile app file not found</h2>", status_code=404)
 
 

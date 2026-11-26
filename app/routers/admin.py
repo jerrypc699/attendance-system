@@ -134,14 +134,49 @@ def get_branch_qr_token(branch_code: str, db: Session = Depends(get_db)):
 @router.post("/employees", status_code=status.HTTP_201_CREATED)
 def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
     code = payload.employee_code.strip().upper()
-    email = payload.email.strip().lower()
-    existing = db.query(Employee).filter(
-        (Employee.employee_code == code) | (Employee.email == email)
-    ).first()
+    raw_email = (payload.email or "").strip().lower()
+    email = raw_email if raw_email else f"{code.lower()}@walaahr.local"
+
+    existing = db.query(Employee).filter(Employee.employee_code == code).first()
     if existing:
         if not existing.is_active:
-            raise HTTPException(status_code=400, detail="يوجد موظف معطّل بنفس الكود أو البريد.")
-        raise HTTPException(status_code=400, detail="يوجد موظف بنفس الكود أو البريد الإلكتروني بالفعل.")
+            # Reactivate cleanly if HR re-adds a previously deactivated employee code
+            raw_code, code_hash = generate_activation_code()
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=48)
+            existing.full_name = payload.full_name.strip()
+            if raw_email:
+                existing.email = raw_email
+            existing.phone = payload.phone.strip() if payload.phone else existing.phone
+            existing.department = payload.department.strip() if payload.department else (existing.department or "العام")
+            existing.is_active = True
+            existing.is_face_enrolled = False
+            existing.face_embedding = None
+            existing.bound_device_id = None
+            existing.enrollment_token_hash = code_hash
+            existing.enrollment_token_expires_at = expires_at
+            db.commit()
+            db.refresh(existing)
+            return {
+                "id": existing.id,
+                "employee_code": existing.employee_code,
+                "full_name": existing.full_name,
+                "email": existing.email,
+                "phone": existing.phone,
+                "department": existing.department,
+                "bound_device_id": existing.bound_device_id,
+                "is_face_enrolled": existing.is_face_enrolled,
+                "face_model_version": existing.face_model_version,
+                "is_active": existing.is_active,
+                "activation_code": raw_code,
+                "activation_expires_at": _iso_utc(expires_at),
+            }
+        raise HTTPException(status_code=400, detail="يوجد موظف بنفس الكود بالفعل.")
+
+    # Ensure unique email if auto-generated or reused
+    if db.query(Employee).filter(Employee.email == email).first():
+        if raw_email:
+            raise HTTPException(status_code=400, detail="يوجد موظف بنفس البريد الإلكتروني بالفعل.")
+        email = f"{code.lower()}_{secrets.token_hex(2)}@walaahr.local"
 
     raw_code, code_hash = generate_activation_code()
     expires_at = datetime.now(timezone.utc) + timedelta(hours=48)

@@ -1,11 +1,11 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
 # ----------------- AUTH SCHEMAS -----------------
 class AdminLoginRequest(BaseModel):
-    username: str = Field(..., min_length=2, max_length=80)
+    username: str = Field(..., min_length=1, max_length=80)
     password: str = Field(..., min_length=4, max_length=128)
 
 
@@ -20,16 +20,16 @@ class AdminLoginResponse(BaseModel):
 
 class AdminChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
 
 
 # ----------------- BRANCH SCHEMAS -----------------
 class BranchCreate(BaseModel):
-    name: str = Field(..., min_length=2, max_length=150)
-    code: str = Field(..., min_length=2, max_length=50)
+    name: str = Field(..., min_length=1, max_length=150)
+    code: str = Field(..., min_length=1, max_length=50)
     latitude: float = Field(..., ge=-90.0, le=90.0)
     longitude: float = Field(..., ge=-180.0, le=180.0)
-    radius_meters: int = Field(default=100, ge=10, le=2000)
+    radius_meters: int = Field(default=100, ge=10, le=5000)
     allowed_wifi_bssids: List[str] = []
     allowed_beacon_uuids: List[str] = []
     allowed_public_ips: List[str] = []
@@ -40,7 +40,7 @@ class BranchUpdate(BaseModel):
     name: Optional[str] = None
     latitude: Optional[float] = Field(default=None, ge=-90.0, le=90.0)
     longitude: Optional[float] = Field(default=None, ge=-180.0, le=180.0)
-    radius_meters: Optional[int] = Field(default=None, ge=10, le=2000)
+    radius_meters: Optional[int] = Field(default=None, ge=10, le=5000)
     allowed_wifi_bssids: Optional[List[str]] = None
     allowed_beacon_uuids: Optional[List[str]] = None
     allowed_public_ips: Optional[List[str]] = None
@@ -48,11 +48,30 @@ class BranchUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class BranchResponse(BranchCreate):
+class BranchResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
-    is_active: bool
-    created_at: datetime
+    name: str
+    code: str
+    latitude: float
+    longitude: float
+    radius_meters: int
+    allowed_wifi_bssids: List[str] = []
+    allowed_beacon_uuids: List[str] = []
+    allowed_public_ips: List[str] = []
+    require_qr_code: bool = False
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+
+    @field_validator("allowed_wifi_bssids", "allowed_beacon_uuids", "allowed_public_ips", mode="before")
+    @classmethod
+    def _coerce_list(cls, v):
+        return v if isinstance(v, list) else []
+
+    @field_validator("require_qr_code", "is_active", mode="before")
+    @classmethod
+    def _coerce_bool(cls, v):
+        return bool(v) if v is not None else False
 
 
 # ----------------- DEVICE SCHEMAS -----------------
@@ -73,18 +92,18 @@ class DeviceResponse(BaseModel):
     device_model: str
     os_name: str
     os_version: str
-    is_trusted: bool
-    is_blocked: bool
+    is_trusted: bool = True
+    is_blocked: bool = False
     blocked_reason: Optional[str] = None
-    registered_at: datetime
+    registered_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
 
 
 # ----------------- EMPLOYEE SCHEMAS -----------------
 class EmployeeCreate(BaseModel):
-    employee_code: str = Field(..., min_length=2, max_length=50)
-    full_name: str = Field(..., min_length=2, max_length=150)
-    email: str = Field(..., min_length=4, max_length=150)
+    employee_code: str = Field(..., min_length=1, max_length=50)
+    full_name: str = Field(..., min_length=1, max_length=150)
+    email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
 
@@ -112,13 +131,13 @@ class EmployeeResponse(BaseModel):
     id: str
     employee_code: str
     full_name: str
-    email: str
+    email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
     bound_device_id: Optional[str] = None
-    is_face_enrolled: bool
+    is_face_enrolled: bool = False
     face_model_version: Optional[str] = None
-    is_active: bool
+    is_active: bool = True
 
 
 # ----------------- LIVENESS & CHALLENGE SCHEMAS -----------------
