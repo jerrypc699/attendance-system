@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from PIL import Image
+from PIL import Image, ImageOps
 from app.config import settings
 
 SAFE_PATH_RE = re.compile(r"^[0-9]{4}-[0-9]{2}/[a-f0-9\-]+\.jpg$")
@@ -19,8 +19,9 @@ def get_upload_root() -> str:
 
 def save_snapshot_from_base64(snapshot_data: Optional[str], prefix: str = "punch") -> Optional[str]:
     """
-    Decodes a base64 image or data URL, resizes to max 480x480 JPEG (quality=80),
-    saves to disk under uploads/snapshots/YYYY-MM/<id>.jpg, and returns the protected API path.
+    Decodes a base64 image or data URL, applies EXIF orientation so phone camera photos
+    are always upright, resizes to max 480x480 JPEG (quality=80), saves to disk under
+    uploads/snapshots/YYYY-MM/<id>.jpg, and returns the protected API path.
     """
     if not snapshot_data:
         return None
@@ -32,7 +33,8 @@ def save_snapshot_from_base64(snapshot_data: Optional[str], prefix: str = "punch
     try:
         raw_b64 = snapshot_data.split(",", 1)[1] if "," in snapshot_data else snapshot_data
         img_bytes = base64.b64decode(raw_b64)
-        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img = Image.open(io.BytesIO(img_bytes))
+        img = ImageOps.exif_transpose(img).convert("RGB")
         img.thumbnail((480, 480))
 
         month_dir = datetime.now(timezone.utc).strftime("%Y-%m")

@@ -1,9 +1,11 @@
 import base64
+import io
 import os
 import threading
 from typing import List, Optional, Tuple
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
 from app.config import settings
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB safety limit
@@ -66,8 +68,10 @@ class FaceAIEngine:
             img_bytes = base64.b64decode(raw_b64)
             if len(img_bytes) > MAX_IMAGE_BYTES:
                 return None, "IMAGE_TOO_LARGE: حجم الصورة يتجاوز الحد المسموح (5MB)."
-            arr = np.frombuffer(img_bytes, dtype=np.uint8)
-            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            # Use PIL + exif_transpose so Android/iOS front-camera EXIF rotation is always upright!
+            pil_img = Image.open(io.BytesIO(img_bytes))
+            pil_img = ImageOps.exif_transpose(pil_img).convert("RGB")
+            img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
             if img is None or img.size == 0:
                 return None, "INVALID_IMAGE: تعذر قراءة الصورة الملتقطة."
             h, w = img.shape[:2]
