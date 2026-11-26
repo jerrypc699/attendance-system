@@ -50,6 +50,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   final TextEditingController _activationController = TextEditingController();
 
   bool isVerified = false;
+  bool isAutoChecking = true;
   bool isProcessing = false;
   bool isFaceEnrolled = false;
   bool isCameraInitialized = false;
@@ -66,15 +67,65 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSavedServerUrl();
     _initCamera();
+    _bootstrapSession();
   }
 
-  Future<void> _loadSavedServerUrl() async {
+  Future<void> _bootstrapSession() async {
     final saved = await SecurityChecker.getSavedServerUrl();
-    if (saved != null && saved.startsWith("https://")) {
+    if (saved != null && saved.startsWith("https://") && mounted) {
       setState(() => serverUrl = saved);
     }
+    await _tryAutoRecognizeDevice();
+  }
+
+  /// Automatically recognizes an already-bound phone on app launch so the employee
+  /// opens directly on the Camera + Punch screen without re-entering their code!
+  Future<void> _tryAutoRecognizeDevice() async {
+    try {
+      final token = await SecurityChecker.getAnySavedDeviceToken();
+      if (token == null || token.isEmpty) {
+        if (mounted) setState(() => isAutoChecking = false);
+        return;
+      }
+      final fp = await SecurityChecker.getDeviceFingerprint();
+      final res = await http
+          .post(
+            Uri.parse('$serverUrl/api/v1/attendance/device-session'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'device_fingerprint': fp,
+              'device_token': token,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(res.bodyBytes));
+        final code = data['employee_code'] ?? "";
+        if (code.isNotEmpty) {
+          await SecurityChecker.saveDeviceToken(code, token);
+        }
+        if (mounted) {
+          setState(() {
+            isVerified = true;
+            employeeCode = code;
+            employeeName = data['full_name'] ?? code;
+            employeeDept = data['department'] ?? "العام";
+            isFaceEnrolled = data['is_face_enrolled'] ?? false;
+            final lastPunch = data['last_punch_today'];
+            challengeStatus = isFaceEnrolled
+                ? (lastPunch == 'CHECK_IN'
+                    ? "لقد سجلت حضورك اليوم — جاهز لتسجيل الانصراف"
+                    : "جاهز لتسجيل الحضور بالبصمة الحية")
+                : "أدخل كود التفعيل الصادر من الإدارة ثم التقط صورة لوجهك";
+            isAutoChecking = false;
+          });
+          return;
+        }
+      }
+    } catch (_) {}
+    if (mounted) setState(() => isAutoChecking = false);
   }
 
   Future<void> _initCamera() async {
@@ -426,10 +477,22 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
       ),
       backgroundColor: const Color(0xFF0F172A),
       body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: !isVerified ? _buildEmployeeLookupView() : _buildPunchReadyView(),
-        ),
+        child: isAutoChecking
+            ? const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Color(0xFF818CF8)),
+                  SizedBox(height: 14),
+                  Text(
+                    "جارٍ التعرف على الهاتف المسجل...",
+                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: !isVerified ? _buildEmployeeLookupView() : _buildPunchReadyView(),
+              ),
       ),
     );
   }

@@ -369,6 +369,7 @@
 
         function setDeviceToken(empCode, token) {
             localStorage.setItem(`attendance_device_token_${empCode.toUpperCase()}`, token);
+            localStorage.setItem('attendance_active_device_token', token);
         }
 
         // Real Geolocation (strictly no fake fallback!)
@@ -796,7 +797,25 @@
             detailsEl.innerHTML = photoHeader + detailsHtml;
         }
 
-        // Init from URL query (?code=EMP-1001&act=ACT-XXXXXX) or saved local employee
+        // Init from URL query (?code=EMP-1001&act=ACT-XXXXXX) OR auto-recognize bound phone!
+        function getAnySavedDeviceToken() {
+            const direct = localStorage.getItem('attendance_active_device_token');
+            if (direct) return direct;
+            const lastCode = localStorage.getItem('last_employee_code');
+            if (lastCode) {
+                const tok = localStorage.getItem(`attendance_device_token_${lastCode.toUpperCase()}`);
+                if (tok) return tok;
+            }
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('attendance_device_token_')) {
+                    const v = localStorage.getItem(k);
+                    if (v) return v;
+                }
+            }
+            return null;
+        }
+
         (async function init() {
             await loadPublicConfig();
             refreshGPS();
@@ -811,6 +830,26 @@
                 document.getElementById('emp-code-input').value = qCode.trim().toUpperCase();
                 fetchEmployeeByCode(qCode.trim());
                 return;
+            }
+
+            // Auto-login bound phone immediately without asking for employee code!
+            const fp = localStorage.getItem('attendance_device_fp_v2');
+            const savedToken = getAnySavedDeviceToken();
+            if (fp && savedToken) {
+                try {
+                    const res = await fetch('/api/v1/attendance/device-session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device_fingerprint: fp, device_token: savedToken })
+                    });
+                    if (res.ok) {
+                        const empData = await res.json();
+                        setDeviceToken(empData.employee_code, savedToken);
+                        localStorage.setItem('attendance_active_device_token', savedToken);
+                        applyVerifiedEmployee(empData);
+                        return;
+                    }
+                } catch (_) {}
             }
 
             const savedCode = localStorage.getItem('last_employee_code');

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'attendance-pwa-v3';
+const CACHE_NAME = 'attendance-pwa-v4';
 const PRECACHE_URLS = ['/mobile', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

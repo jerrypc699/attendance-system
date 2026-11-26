@@ -10,6 +10,7 @@ from app.models import AttendanceLog, Branch, Device, Employee, FraudAlert
 from app.schemas import (
     ChallengeRequest,
     ChallengeResponse,
+    DeviceSessionRequest,
     MobileEnrollRequest,
     PunchVerificationRequest,
     PunchVerificationResponse,
@@ -17,6 +18,7 @@ from app.schemas import (
 from app.security.auth import (
     generate_device_token,
     get_client_ip,
+    hash_secret_token,
     verify_activation_code,
 )
 from app.security.biometric_verifier import BiometricVerifier
@@ -90,6 +92,67 @@ def get_kiosk_rotating_qr(branch_code: str, key: str, db: Session = Depends(get_
     data["branch_name"] = branch.name
     data["company_name"] = settings.COMPANY_NAME
     return data
+
+
+@router.post(
+    "/device-session",
+    dependencies=[Depends(limit_requests("device_session", max_requests=40, window_seconds=60))],
+)
+def resolve_bound_device_session(payload: DeviceSessionRequest, db: Session = Depends(get_db)):
+    """
+    Recognizes an already-bound employee phone automatically on app launch so the employee
+    never has to type their employee code again. Strictly verifies hardware fingerprint,
+    block/trust status, and cryptographic device_token.
+    """
+    import secrets
+
+    device = db.query(Device).filter(Device.device_fingerprint == payload.device_fingerprint.strip()).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="الجهاز غير مسجل بعد.")
+    if device.is_blocked:
+        raise HTTPException(status_code=403, detail="هذا الهاتف محظور من قبل مسؤول النظام.")
+    if not device.is_trusted:
+        raise HTTPException(status_code=403, detail="سلامة هذا الهاتف غير موثوقة.")
+
+    if device.device_token_hash:
+        if not payload.device_token:
+            raise HTTPException(status_code=403, detail="مفتاح توثيق الجهاز مفقود.")
+        if not secrets.compare_digest(hash_secret_token(payload.device_token), device.device_token_hash):
+            raise HTTPException(status_code=403, detail="مفتاح توثيق الجهاز غير صالح.")
+
+    emp = (
+        db.query(Employee)
+        .filter(Employee.bound_device_id == device.id, Employee.is_active == True)
+        .first()
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="هذا الهاتف غير مربوط بأي موظف نشط حالياً.")
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    last_punch = (
+        db.query(AttendanceLog)
+        .filter(
+            AttendanceLog.employee_id == emp.id,
+            AttendanceLog.status == "APPROVED",
+            AttendanceLog.server_timestamp >= today_start,
+        )
+        .order_by(AttendanceLog.server_timestamp.desc())
+        .first()
+    )
+
+    device.last_seen_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "employee_code": emp.employee_code,
+        "full_name": emp.full_name,
+        "department": emp.department or "العام",
+        "is_face_enrolled": emp.is_face_enrolled,
+        "is_device_bound": True,
+        "requires_activation_code": not emp.is_face_enrolled,
+        "last_punch_today": last_punch.punch_type if last_punch else None,
+        "is_active": emp.is_active,
+    }
 
 
 @router.get(

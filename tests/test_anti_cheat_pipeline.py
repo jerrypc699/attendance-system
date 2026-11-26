@@ -251,7 +251,31 @@ def test_happy_path_punch_in_and_check_out_with_duplicate_guard(setup_database):
 
 
 def test_device_token_anti_spoofing(setup_database):
-    """Even with matching device_fingerprint, forged or missing device_token must be blocked."""
+    """Even with matching device_fingerprint, forged or missing device_token must be blocked; valid device auto-logs in."""
+    dev_token = setup_database["device_token"]
+
+    # Auto device-session recognition works for genuine bound phone
+    ok_sess = client.post(
+        "/api/v1/attendance/device-session",
+        json={
+            "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
+            "device_token": dev_token,
+        },
+    )
+    assert ok_sess.status_code == 200
+    assert ok_sess.json()["employee_code"] == "EMP-1001"
+    assert ok_sess.json()["is_face_enrolled"] is True
+
+    # Auto device-session rejects forged token
+    bad_sess = client.post(
+        "/api/v1/attendance/device-session",
+        json={
+            "device_fingerprint": "sha256_hardware_fingerprint_employee_1",
+            "device_token": "forged_token",
+        },
+    )
+    assert bad_sess.status_code == 403
+
     res_missing = client.post(
         "/api/v1/attendance/challenge",
         json={

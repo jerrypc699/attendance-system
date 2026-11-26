@@ -141,6 +141,11 @@ class EmployeeResponse(BaseModel):
 
 
 # ----------------- LIVENESS & CHALLENGE SCHEMAS -----------------
+class DeviceSessionRequest(BaseModel):
+    device_fingerprint: str = Field(..., min_length=8, max_length=128)
+    device_token: Optional[str] = None
+
+
 class ChallengeRequest(BaseModel):
     employee_code: str
     device_fingerprint: str

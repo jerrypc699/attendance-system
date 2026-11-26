@@ -47,11 +47,25 @@ class SecurityChecker {
   }
 
   static Future<String?> getDeviceToken(String employeeCode) async {
-    return await _storage.read(key: "device_token_${employeeCode.toUpperCase()}");
+    return await _storage.read(key: "device_token_${employeeCode.toUpperCase()}") ??
+        await _storage.read(key: "active_device_token");
+  }
+
+  static Future<String?> getAnySavedDeviceToken() async {
+    final active = await _storage.read(key: "active_device_token");
+    if (active != null && active.isNotEmpty) return active;
+    final all = await _storage.readAll();
+    for (final entry in all.entries) {
+      if (entry.key.startsWith("device_token_") && entry.value.isNotEmpty) {
+        return entry.value;
+      }
+    }
+    return null;
   }
 
   static Future<void> saveDeviceToken(String employeeCode, String token) async {
     await _storage.write(key: "device_token_${employeeCode.toUpperCase()}", value: token);
+    await _storage.write(key: "active_device_token", value: token);
   }
 
   /// Persistent hardware-derived SHA-256 fingerprint (never derived from employeeCode!)
