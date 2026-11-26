@@ -24,6 +24,7 @@ from app.schemas import (
     EmployeeCreate,
     EmployeeEnrollFace,
     EmployeeResponse,
+    EmployeeUpdate,
 )
 from app.security.auth import generate_activation_code, get_client_ip, require_admin
 from app.security.face_ai import FaceAIEngine, SFACE_MODEL_VERSION
@@ -206,7 +207,19 @@ def update_branch(branch_id: str, payload: BranchUpdate, db: Session = Depends(g
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
         raise HTTPException(status_code=404, detail="الفرع غير موجود.")
-    for field, val in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "code" in updates and updates["code"] is not None:
+        new_code = updates["code"].strip().upper()
+        conflict = db.query(Branch).filter(Branch.code == new_code, Branch.id != branch_id).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="يوجد فرع آخر بنفس الكود بالفعل.")
+        updates["code"] = new_code
+    if "name" in updates and updates["name"] is not None:
+        updates["name"] = updates["name"].strip()
+    for list_field in ("allowed_wifi_bssids", "allowed_beacon_uuids", "allowed_public_ips"):
+        if list_field in updates and updates[list_field] is not None:
+            updates[list_field] = [x.strip() for x in updates[list_field] if x.strip()]
+    for field, val in updates.items():
         setattr(branch, field, val)
     db.commit()
     db.refresh(branch)
@@ -350,6 +363,36 @@ def list_employees(include_inactive: bool = False, db: Session = Depends(get_db)
         }
         for e in emps
     ]
+
+
+@router.patch("/employees/{employee_id}")
+def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Depends(get_db)):
+    emp = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not emp:
+        raise HTTPException(status_code=404, detail="الموظف غير موجود.")
+    updates = payload.model_dump(exclude_unset=True)
+    if "employee_code" in updates and updates["employee_code"] is not None:
+        new_code = updates["employee_code"].strip().upper()
+        conflict = db.query(Employee).filter(Employee.employee_code == new_code, Employee.id != employee_id).first()
+        if conflict:
+            raise HTTPException(status_code=400, detail="يوجد موظف آخر بنفس الكود بالفعل.")
+        emp.employee_code = new_code
+    if "full_name" in updates and updates["full_name"] is not None:
+        emp.full_name = updates["full_name"].strip()
+    if "email" in updates and updates["email"] is not None:
+        new_email = updates["email"].strip().lower()
+        if new_email:
+            conflict = db.query(Employee).filter(Employee.email == new_email, Employee.id != employee_id).first()
+            if conflict:
+                raise HTTPException(status_code=400, detail="يوجد موظف آخر بنفس البريد الإلكتروني بالفعل.")
+            emp.email = new_email
+    if "phone" in updates:
+        emp.phone = updates["phone"].strip() if updates["phone"] else None
+    if "department" in updates:
+        emp.department = updates["department"].strip() if updates["department"] else "العام"
+    db.commit()
+    db.refresh(emp)
+    return {"message": "تم تحديث بيانات الموظف بنجاح.", "id": emp.id, "employee_code": emp.employee_code, "full_name": emp.full_name}
 
 
 @router.delete("/employees/{employee_id}")

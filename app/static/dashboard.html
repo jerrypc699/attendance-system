@@ -443,7 +443,7 @@
         class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div class="flex justify-between items-center border-b pb-3">
-                <h3 class="font-bold text-slate-900">إضافة موظف جديد</h3>
+                <h3 id="emp-modal-title" class="font-bold text-slate-900">إضافة موظف جديد</h3>
                 <button onclick="closeModal('modal-add-employee')"
                     class="text-slate-400 text-xl font-bold">&times;</button>
             </div>
@@ -477,7 +477,7 @@
                 </div>
                 <div id="emp-form-error" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-center"></div>
                 <div class="pt-2 flex gap-2">
-                    <button type="submit"
+                    <button id="emp-modal-submit" type="submit"
                         class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl">حفظ
                         وتوليد كود التفعيل</button>
                     <button type="button" onclick="closeModal('modal-add-employee')"
@@ -517,7 +517,7 @@
         <div class="bg-white rounded-3xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-5 shadow-2xl space-y-3.5">
             <div class="flex justify-between items-center border-b pb-2.5 sticky top-0 bg-white z-10">
                 <div>
-                    <h3 class="font-black text-slate-900 text-base">🏢 إضافة فرع / مقر عمل جديد</h3>
+                    <h3 id="branch-modal-title" class="font-black text-slate-900 text-base">🏢 إضافة فرع / مقر عمل جديد</h3>
                     <p class="text-[11px] text-slate-500">الصق رابط Google Maps أو اضغط على موقع الشركة في الخريطة مباشرة</p>
                 </div>
                 <button onclick="closeModal('modal-add-branch')"
@@ -630,7 +630,7 @@
                 <div id="branch-form-error" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-300 text-rose-700 font-bold text-center"></div>
 
                 <div class="pt-1 flex gap-2">
-                    <button type="submit"
+                    <button id="branch-modal-submit" type="submit"
                         class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl shadow">💾 حفظ الفرع</button>
                     <button type="button" onclick="closeModal('modal-add-branch')"
                         class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 rounded-xl">إلغاء</button>
@@ -685,6 +685,10 @@
         let adminToken = localStorage.getItem('admin_jwt') || sessionStorage.getItem('admin_jwt') || '';
         let detectedPublicIp = '';
         let activeObjectUrl = null;
+        let cachedBranches = [];
+        let cachedEmployees = [];
+        let editingBranchId = null;
+        let editingEmployeeId = null;
 
         function escapeHtml(str) {
             return String(str ?? '').replace(/[&<>"']/g, s => ({
@@ -730,19 +734,42 @@
             document.getElementById('btn-' + id)?.classList.add('active');
         }
 
-        function openModal(id) {
+        function openModal(id, keepEditState = false) {
             document.getElementById(id).classList.remove('hidden');
             if (id === 'modal-add-branch') {
                 document.getElementById('branch-form-error').classList.add('hidden');
-                const codeInp = document.getElementById('b-code');
-                if (!codeInp.value.trim()) {
+                if (!keepEditState) {
+                    editingBranchId = null;
+                    document.getElementById('branch-modal-title').innerText = '🏢 إضافة فرع / مقر عمل جديد';
+                    document.getElementById('branch-modal-submit').innerText = '💾 حفظ الفرع';
+                    document.getElementById('b-name').value = '';
                     const count = parseInt(document.getElementById('count-branch-tab').innerText || '0') || 0;
-                    codeInp.value = `BR-${count + 1}`;
+                    document.getElementById('b-code').value = `BR-${count + 1}`;
+                    document.getElementById('b-maps-url').value = '';
+                    document.getElementById('b-place-search').value = '';
+                    document.getElementById('b-lat').value = '';
+                    document.getElementById('b-lng').value = '';
+                    document.getElementById('b-radius').value = 100;
+                    document.getElementById('b-radius-val').innerText = '100';
+                    document.getElementById('b-ips').value = '';
+                    document.getElementById('b-wifi').value = '';
+                    document.getElementById('b-req-qr').checked = false;
+                    document.getElementById('picked-coords-label').innerText = 'اضغط على الخريطة لتحديد المبنى';
                 }
                 setTimeout(() => initBranchMap(), 120);
             }
             if (id === 'modal-add-employee') {
                 document.getElementById('emp-form-error').classList.add('hidden');
+                if (!keepEditState) {
+                    editingEmployeeId = null;
+                    document.getElementById('emp-modal-title').innerText = 'إضافة موظف جديد';
+                    document.getElementById('emp-modal-submit').innerText = 'حفظ وتوليد كود التفعيل';
+                    document.getElementById('e-code').value = '';
+                    document.getElementById('e-name').value = '';
+                    document.getElementById('e-email').value = '';
+                    document.getElementById('e-phone').value = '';
+                    document.getElementById('e-dept').value = '';
+                }
             }
         }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
@@ -849,6 +876,8 @@
             document.getElementById('stat-approved-count').innerText = logs.filter(l => l.status === 'APPROVED').length;
             document.getElementById('stat-fraud-count').innerText = frauds.length;
 
+            cachedBranches = branches;
+            cachedEmployees = employees;
             renderEmployees(employees);
             renderBranches(branches);
             renderDevices(devices);
@@ -884,6 +913,7 @@
                     </td>
                     <td class="p-3.5">${e.bound_device_id ? `<div class="text-indigo-700 font-bold text-[11px]">📱 ${escapeHtml(e.bound_device_model || 'مربوط')}</div>` : '<span class="text-slate-400">غير مربوط</span>'}</td>
                     <td class="p-3.5 text-center flex flex-wrap items-center justify-center gap-1.5">
+                        <button onclick="openEditEmployee('${escapeHtml(e.id)}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-slate-200">✏️ تعديل</button>
                         ${!e.is_face_enrolled ? `<button onclick="genActivationCode('${escapeHtml(e.employee_code)}', '${escapeHtml(e.full_name)}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-indigo-200">🔑 كود تفعيل</button>` : ''}
                         <button onclick="resetEmployeeFace('${escapeHtml(e.employee_code)}', '${escapeHtml(e.full_name)}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-amber-200">🔄 إعادة تعيين</button>
                         <button onclick="deleteEmployee('${escapeHtml(e.id)}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1" title="تعطيل الموظف">🚫</button>
@@ -905,9 +935,10 @@
                     <td class="p-3.5 font-mono text-[11px] text-slate-600">${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)} <span class="bg-blue-50 text-blue-700 font-bold px-1.5 py-0.5 rounded">${b.radius_meters}م</span></td>
                     <td class="p-3.5 font-mono text-[11px] text-slate-500">${(b.allowed_public_ips && b.allowed_public_ips.length) ? escapeHtml(b.allowed_public_ips.join(', ')) : 'غير مقيد'}</td>
                     <td class="p-3.5">${b.require_qr_code ? '<span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-bold text-[10px]">إجباري ✅</span>' : '<span class="text-slate-400 text-[10px]">اختياري</span>'}</td>
-                    <td class="p-3.5 text-center flex items-center justify-center gap-2">
+                    <td class="p-3.5 text-center flex flex-wrap items-center justify-center gap-1.5">
+                        <button onclick="openEditBranch('${escapeHtml(b.id)}')" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg font-bold text-[10px] border border-indigo-200">✏️ تعديل</button>
                         <button onclick="openBranchKiosk('${escapeHtml(b.code)}')" class="bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1 rounded-lg font-bold text-[10px]">📺 شاشة QR المدخل</button>
-                        <button onclick="deleteBranch('${escapeHtml(b.id)}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1">🚫</button>
+                        <button onclick="deleteBranch('${escapeHtml(b.id)}')" class="text-rose-500 hover:text-rose-700 font-bold px-2 py-1" title="تعطيل الفرع">🚫</button>
                     </td>
                 </tr>
             `).join('');
@@ -1039,10 +1070,27 @@
             showToast('تم نسخ رسالة التفعيل! يمكنك لصقها وإرسالها للموظف الآن.');
         }
 
+        function openEditEmployee(empId) {
+            const emp = cachedEmployees.find(x => x.id === empId);
+            if (!emp) return;
+            editingEmployeeId = emp.id;
+            document.getElementById('emp-modal-title').innerText = `✏️ تعديل بيانات الموظف (${emp.employee_code})`;
+            document.getElementById('emp-modal-submit').innerText = '💾 حفظ التعديلات';
+            document.getElementById('e-code').value = emp.employee_code || '';
+            document.getElementById('e-name').value = emp.full_name || '';
+            document.getElementById('e-email').value = emp.email || '';
+            document.getElementById('e-phone').value = emp.phone || '';
+            document.getElementById('e-dept').value = emp.department || '';
+            openModal('modal-add-employee', true);
+        }
+
         async function submitAddEmployee(e) {
             e.preventDefault();
-            const res = await apiFetch('/api/v1/admin/employees', {
-                method: 'POST',
+            const isEdit = Boolean(editingEmployeeId);
+            const url = isEdit ? `/api/v1/admin/employees/${encodeURIComponent(editingEmployeeId)}` : '/api/v1/admin/employees';
+            const method = isEdit ? 'PATCH' : 'POST';
+            const res = await apiFetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     employee_code: document.getElementById('e-code').value.trim(),
@@ -1055,18 +1103,18 @@
             const data = await res.json();
             if (res.ok) {
                 closeModal('modal-add-employee');
-                document.getElementById('e-code').value = '';
-                document.getElementById('e-name').value = '';
-                document.getElementById('e-email').value = '';
-                document.getElementById('e-phone').value = '';
-                document.getElementById('e-dept').value = '';
-                showActivationModal(data.employee_code, data.full_name, data.activation_code);
+                editingEmployeeId = null;
+                if (isEdit) {
+                    showToast('✅ تم تحديث بيانات الموظف بنجاح');
+                } else {
+                    showActivationModal(data.employee_code, data.full_name, data.activation_code);
+                }
                 loadData();
             } else {
                 const errEl = document.getElementById('emp-form-error');
-                errEl.innerText = data.detail || 'فشل إضافة الموظف';
+                errEl.innerText = data.detail || 'فشل حفظ بيانات الموظف';
                 errEl.classList.remove('hidden');
-                showToast(data.detail || 'فشل إضافة الموظف', true);
+                showToast(data.detail || 'فشل حفظ بيانات الموظف', true);
             }
         }
 
@@ -1241,6 +1289,26 @@
             }, () => showToast('يرجى السماح بصلاحية الموقع', true), { enableHighAccuracy: true });
         }
 
+        function openEditBranch(branchId) {
+            const b = cachedBranches.find(x => x.id === branchId);
+            if (!b) return;
+            editingBranchId = b.id;
+            document.getElementById('branch-modal-title').innerText = `✏️ تعديل الفرع: ${b.name} (${b.code})`;
+            document.getElementById('branch-modal-submit').innerText = '💾 حفظ التعديلات';
+            document.getElementById('b-name').value = b.name || '';
+            document.getElementById('b-code').value = b.code || '';
+            document.getElementById('b-maps-url').value = '';
+            document.getElementById('b-place-search').value = '';
+            document.getElementById('b-lat').value = b.latitude;
+            document.getElementById('b-lng').value = b.longitude;
+            document.getElementById('b-radius').value = b.radius_meters || 100;
+            document.getElementById('b-radius-val').innerText = String(b.radius_meters || 100);
+            document.getElementById('b-ips').value = (b.allowed_public_ips || []).join(', ');
+            document.getElementById('b-wifi').value = (b.allowed_wifi_bssids || []).join(', ');
+            document.getElementById('b-req-qr').checked = !!b.require_qr_code;
+            openModal('modal-add-branch', true);
+        }
+
         async function submitAddBranch(e) {
             e.preventDefault();
             const errEl = document.getElementById('branch-form-error');
@@ -1256,8 +1324,12 @@
 
             const ips = document.getElementById('b-ips').value.split(',').map(s => s.trim()).filter(Boolean);
             const wifi = document.getElementById('b-wifi').value.split(',').map(s => s.trim()).filter(Boolean);
-            const res = await apiFetch('/api/v1/admin/branches', {
-                method: 'POST',
+            const isEdit = Boolean(editingBranchId);
+            const url = isEdit ? `/api/v1/admin/branches/${encodeURIComponent(editingBranchId)}` : '/api/v1/admin/branches';
+            const method = isEdit ? 'PATCH' : 'POST';
+
+            const res = await apiFetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: document.getElementById('b-name').value.trim(),
@@ -1272,18 +1344,9 @@
             });
             const data = await res.json();
             if (res.ok) {
-                showToast('✅ تم حفظ الفرع بنجاح');
+                showToast(isEdit ? '✅ تم حفظ تعديلات الفرع بنجاح' : '✅ تم إنشاء الفرع بنجاح');
+                editingBranchId = null;
                 closeModal('modal-add-branch');
-                document.getElementById('b-name').value = '';
-                document.getElementById('b-code').value = '';
-                document.getElementById('b-maps-url').value = '';
-                document.getElementById('b-place-search').value = '';
-                document.getElementById('b-lat').value = '';
-                document.getElementById('b-lng').value = '';
-                document.getElementById('b-ips').value = '';
-                document.getElementById('b-wifi').value = '';
-                document.getElementById('b-req-qr').checked = false;
-                document.getElementById('picked-coords-label').innerText = 'اضغط على الخريطة لتحديد المبنى';
                 loadData();
             } else {
                 const msg = data.detail || 'تعذر حفظ الفرع';

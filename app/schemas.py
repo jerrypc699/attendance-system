@@ -37,7 +37,8 @@ class BranchCreate(BaseModel):
 
 
 class BranchUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=150)
+    code: Optional[str] = Field(default=None, min_length=1, max_length=50)
     latitude: Optional[float] = Field(default=None, ge=-90.0, le=90.0)
     longitude: Optional[float] = Field(default=None, ge=-180.0, le=180.0)
     radius_meters: Optional[int] = Field(default=None, ge=10, le=5000)
@@ -103,6 +104,14 @@ class DeviceResponse(BaseModel):
 class EmployeeCreate(BaseModel):
     employee_code: str = Field(..., min_length=1, max_length=50)
     full_name: str = Field(..., min_length=1, max_length=150)
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    department: Optional[str] = None
+
+
+class EmployeeUpdate(BaseModel):
+    employee_code: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    full_name: Optional[str] = Field(default=None, min_length=1, max_length=150)
     email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
