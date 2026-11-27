@@ -181,6 +181,7 @@ def download_apk():
             APK_FILE,
             media_type="application/vnd.android.package-archive",
             filename="WalaaHR-Android.apk",
+            headers={"Cache-Control": "no-store, max-age=0"},
         )
     return HTMLResponse("<h2>ملف الـ APK غير متوفر محلياً — يرجى تحميله من رابط الإصدارات</h2>", status_code=404)
 
@@ -193,6 +194,7 @@ def download_ios_ipa():
             IPA_FILE,
             media_type="application/octet-stream",
             filename="WalaaHR-iOS-unsigned.ipa",
+            headers={"Cache-Control": "no-store, max-age=0"},
         )
     return HTMLResponse("<h2>ملف الـ IPA غير متوفر محلياً بعد</h2>", status_code=404)
 

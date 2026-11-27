@@ -39,17 +39,42 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Generate Clean Android Scaffolding
+      - name: Generate Clean Android Scaffolding & Wire Permanent Release Signing
         working-directory: ./flutter_app
         env:
           APP_ID: ${{ github.event.inputs.app_id || 'com.walaahr.attendance' }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           ORG_PREFIX="${APP_ID%.*}"
           rm -rf android
           flutter create --platforms=android --org "$ORG_PREFIX" --project-name attendance_mobile_app .
-          python3 - <<'PYEOF'
+
+          HAS_KEYSTORE="false"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.p12
+            ACTUAL_ALIAS=$(keytool -list -keystore android/app/upload-keystore.p12 -storetype PKCS12 -storepass "$KEYSTORE_PASSWORD" | awk -F',' '/PrivateKeyEntry/{print $1; exit}')
+            if [ -z "$ACTUAL_ALIAS" ]; then
+              echo "::error::No PrivateKeyEntry found in upload-keystore.p12!"
+              exit 1
+            fi
+            echo "Verified permanent keystore entry alias: $ACTUAL_ALIAS"
+            cat <<EOF > android/key.properties
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$ACTUAL_ALIAS
+          storeFile=upload-keystore.p12
+          EOF
+            HAS_KEYSTORE="true"
+          else
+            echo "::warning::KEYSTORE_BASE64 not set; falling back to debug signing."
+          fi
+
+          HAS_KEYSTORE="$HAS_KEYSTORE" python3 - <<'PYEOF'
           from pathlib import Path
-          import re
+          import os, re
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           txt = manifest.read_text(encoding="utf-8")
@@ -65,46 +90,93 @@ jobs:
           txt = re.sub(r'android:label="[^"]*"', 'android:label="ولاء للحضور"', txt)
           manifest.write_text(txt, encoding="utf-8")
 
-          for gradle_name in ("android/app/build.gradle", "android/app/build.gradle.kts"):
-              gp = Path(gradle_name)
-              if gp.exists():
-                  g = gp.read_text(encoding="utf-8")
-                  g = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 21', g)
-                  g = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', g)
-                  g = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36', g)
-                  g = re.sub(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 36', g)
-                  gp.write_text(g, encoding="utf-8")
+          has_ks = os.environ.get("HAS_KEYSTORE") == "true"
+
+          kts_path = Path("android/app/build.gradle.kts")
+          if kts_path.exists():
+              g = kts_path.read_text(encoding="utf-8")
+              g = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 21', g)
+              g = re.sub(r'compileSdk\s*=\s*flutter\.compileSdkVersion', 'compileSdk = 36', g)
+              if has_ks:
+                  imports_block = "import java.util.Properties\nimport java.io.FileInputStream\n"
+                  props_block = """
+          val keystoreProperties = Properties()
+          val keystorePropertiesFile = rootProject.file("key.properties")
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+          }
+          """
+                  g = imports_block + g
+                  g = g.replace("android {", props_block + "\nandroid {", 1)
+                  signing_block = """
+              signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties.getProperty("keyAlias")
+                      keyPassword = keystoreProperties.getProperty("keyPassword")
+                      storeFile = file(keystoreProperties.getProperty("storeFile"))
+                      storePassword = keystoreProperties.getProperty("storePassword")
+                  }
+              }
+          """
+                  g = g.replace("buildTypes {", signing_block + "\n    buildTypes {", 1)
+                  g = g.replace(
+                      'signingConfig = signingConfigs.getByName("debug")',
+                      'signingConfig = signingConfigs.getByName("release")',
+                  )
+              kts_path.write_text(g, encoding="utf-8")
+
+          groovy_path = Path("android/app/build.gradle")
+          if groovy_path.exists():
+              g = groovy_path.read_text(encoding="utf-8")
+              g = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 21', g)
+              g = re.sub(r'compileSdkVersion\s+flutter\.compileSdkVersion', 'compileSdkVersion 36', g)
+              if has_ks:
+                  props_block = """def keystoreProperties = new Properties()
+          def keystorePropertiesFile = rootProject.file('key.properties')
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+          }
+          """
+                  g = props_block + "\n" + g
+                  signing_block = """
+              signingConfigs {
+                  release {
+                      keyAlias keystoreProperties['keyAlias']
+                      keyPassword keystoreProperties['keyPassword']
+                      storeFile file(keystoreProperties['storeFile'])
+                      storePassword keystoreProperties['storePassword']
+                  }
+              }
+          """
+                  g = g.replace("buildTypes {", signing_block + "\n    buildTypes {", 1)
+                  g = g.replace("signingConfig signingConfigs.debug", "signingConfig signingConfigs.release")
+                  g = g.replace("signingConfig = signingConfigs.debug", "signingConfig = signingConfigs.release")
+              groovy_path.write_text(g, encoding="utf-8")
           PYEOF
 
-      - name: Configure Optional Release Signing Keystore
-        working-directory: ./flutter_app
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
-            cat <<EOF > android/key.properties
-          storePassword=$KEYSTORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=$KEY_ALIAS
-          storeFile=upload-keystore.jks
-          EOF
-            echo "Release keystore configured."
-          else
-            echo "No KEYSTORE_BASE64 secret provided; building with default signing."
-          fi
-
-      - name: Get Dependencies & Build Android APK
+      - name: Get Dependencies & Build Versioned Signed Android APK
         working-directory: ./flutter_app
         env:
           API_URL: ${{ github.event.inputs.api_url || 'https://walaahr.dpdns.org' }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
+          BUILD_NUM=$((100 + ${{ github.run_number }}))
+          BUILD_NAME="2.0.${{ github.run_number }}"
+          echo "Building Android APK version ${BUILD_NAME}+${BUILD_NUM} ..."
           flutter pub get
-          flutter build apk --release --dart-define=API_URL="$API_URL"
+          flutter build apk --release \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NUM" \
+            --dart-define=API_URL="$API_URL"
           cp build/app/outputs/flutter-apk/app-release.apk build/WalaaHR-Android.apk
+
+          echo "=== Verifying APK Signing Certificate ==="
+          CERT_INFO=$(keytool -printcert -jarfile build/WalaaHR-Android.apk)
+          echo "$CERT_INFO" | grep -E "Owner:|Issuer:|Valid from:|SHA256:" || true
+          if [ -n "$KEYSTORE_BASE64" ] && echo "$CERT_INFO" | grep -qi "CN=Android Debug"; then
+            echo "::error::APK was accidentally signed with Android Debug key instead of permanent release key!"
+            exit 1
+          fi
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
@@ -134,7 +206,7 @@ jobs:
           flutter create --platforms=ios --org "$ORG_PREFIX" --project-name attendance_mobile_app .
           python3 - <<'PYEOF'
           from pathlib import Path
-          import plistlib
+          import plistlib, re
 
           plist_path = Path("ios/Runner/Info.plist")
           with plist_path.open("rb") as f:
@@ -146,7 +218,6 @@ jobs:
           with plist_path.open("wb") as f:
               plistlib.dump(data, f)
 
-          import re
           pbx = Path("ios/Runner.xcodeproj/project.pbxproj")
           t = pbx.read_text(encoding="utf-8")
           t = re.sub(r'IPHONEOS_DEPLOYMENT_TARGET\s*=\s*[0-9\.]+;', 'IPHONEOS_DEPLOYMENT_TARGET = 15.5;', t)
@@ -158,12 +229,17 @@ jobs:
         env:
           API_URL: ${{ github.event.inputs.api_url || 'https://walaahr.dpdns.org' }}
         run: |
+          BUILD_NUM=$((100 + ${{ github.run_number }}))
+          BUILD_NAME="2.0.${{ github.run_number }}"
           flutter pub get
           if [ -f ios/Podfile ]; then
             sed -i '' "s/^# *platform :ios.*/platform :ios, '15.5'/" ios/Podfile || true
             sed -i '' "s/^platform :ios.*/platform :ios, '15.5'/" ios/Podfile || true
           fi
-          flutter build ios --release --no-codesign --dart-define=API_URL="$API_URL"
+          flutter build ios --release --no-codesign \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NUM" \
+            --dart-define=API_URL="$API_URL"
           mkdir -p build/ipa_stage/Payload
           cp -r build/ios/iphoneos/Runner.app build/ipa_stage/Payload/Runner.app
           cd build/ipa_stage
@@ -199,7 +275,7 @@ jobs:
           name: "Walaa HR Attendance Apps v2.0.${{ github.run_number }} (Android APK + iOS IPA)"
           body: |
             ## تطبيق ولاء للحضور والانصراف الذكي (https://walaahr.dpdns.org)
-            - **Android:** `WalaaHR-Android.apk` (تثبيت مباشر)
+            - **Android:** `WalaaHR-Android.apk` (موقّع بمفتاح إصدار دائم — يدعم التحديث المباشر فوق النسخة المثبتة بدون حذف!)
             - **iPhone (iOS):** `WalaaHR-iOS-unsigned.ipa` (جاهز للتوقيع عبر Apple Developer / TestFlight أو Sideloadly / AltStore)
           files: |
             release_assets/WalaaHR-Android.apk
