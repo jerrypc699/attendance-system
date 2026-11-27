@@ -107,6 +107,7 @@ class EmployeeCreate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
+    manager_id: Optional[str] = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -115,6 +116,7 @@ class EmployeeUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
+    manager_id: Optional[str] = None
     annual_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=365.0)
     casual_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=60.0)
     sick_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=365.0)
@@ -243,10 +245,17 @@ class AdminHRRequestCreate(BaseModel):
     to_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     location_name: Optional[str] = Field(default=None, max_length=200)
     reason: Optional[str] = Field(default=None, max_length=1000)
-    auto_approve: bool = True
+    auto_approve: bool = False
     admin_notes: Optional[str] = Field(default=None, max_length=500)
 
 
 class HRRequestReview(BaseModel):
     decision: str = Field(..., pattern="^(APPROVED|REJECTED)$")
     admin_notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class ManagerHRRequestReview(BaseModel):
+    device_fingerprint: str = Field(..., min_length=8, max_length=128)
+    device_token: Optional[str] = None
+    decision: str = Field(..., pattern="^(APPROVED|REJECTED)$")
+    manager_notes: Optional[str] = Field(default=None, max_length=500)

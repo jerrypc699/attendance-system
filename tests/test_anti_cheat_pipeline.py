@@ -741,3 +741,113 @@ def test_hr_requests_leaves_permissions_missions_and_excel(setup_database):
     # Sheet 4 lists all HR requests
     ws4 = wb.worksheets[3]
     assert ws4["A5"].value == "EMP-1001"
+
+
+def test_direct_manager_approval_workflow_no_auto_approve(setup_database):
+    """Verify leaves/permissions/missions are NOT auto-approved and must be approved by the employee's direct manager."""
+    from datetime import timedelta
+
+    emp_fp = "sha256_hardware_fingerprint_employee_1"
+    emp_token = setup_database["device_token"]
+    headers = _admin_headers()
+
+    # Seed Direct Manager (EMP-MGR1) and Unrelated Employee (EMP-OTHER) with their own bound phones
+    db = TestingSessionLocal()
+    mgr_raw_tok, mgr_tok_hash = generate_device_token()
+    oth_raw_tok, oth_tok_hash = generate_device_token()
+    dev_mgr = Device(id="dev-mgr", device_fingerprint="fp_direct_manager_001", device_token_hash=mgr_tok_hash, device_model="iPhone 15", os_name="ios", os_version="18", is_trusted=True)
+    dev_oth = Device(id="dev-oth", device_fingerprint="fp_other_employee_002", device_token_hash=oth_tok_hash, device_model="Pixel 9", os_name="android", os_version="15", is_trusted=True)
+    db.add_all([dev_mgr, dev_oth])
+    mgr_emp = Employee(id="emp-mgr", employee_code="EMP-MGR1", full_name="Dr. Aziz Manager", email="mgr@company.com", bound_device_id="dev-mgr", is_face_enrolled=True, is_active=True)
+    oth_emp = Employee(id="emp-oth", employee_code="EMP-OTHER", full_name="Other Colleague", email="other@company.com", bound_device_id="dev-oth", is_face_enrolled=True, is_active=True)
+    db.add_all([mgr_emp, oth_emp])
+    db.commit()
+    db.close()
+
+    # 1. Self-manager assignment must be rejected (400)
+    self_mgr = client.patch("/api/v1/admin/employees/emp-1", headers=headers, json={"manager_id": "emp-1"})
+    assert self_mgr.status_code == 400
+
+    # 2. Assign EMP-MGR1 as direct manager of EMP-1001
+    assign_res = client.patch("/api/v1/admin/employees/emp-1", headers=headers, json={"manager_id": "emp-mgr"})
+    assert assign_res.status_code == 200
+    assert assign_res.json()["manager_id"] == "emp-mgr"
+
+    tomorrow_local = (datetime.now(timezone.utc) + timedelta(hours=2) + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # 3. Admin-created request defaults to PENDING (NO auto-approval!)
+    adm_req = client.post(
+        "/api/v1/admin/requests",
+        headers=headers,
+        json={
+            "employee_code": "EMP-1001",
+            "request_category": "PERMISSION",
+            "request_subtype": "EARLY_LEAVE",
+            "start_date": tomorrow_local,
+            "from_time": "15:00",
+            "to_time": "16:30",
+        },
+    )
+    assert adm_req.status_code == 201
+    assert adm_req.json()["request"]["status"] == "PENDING"
+    assert adm_req.json()["request"]["assigned_manager_id"] == "emp-mgr"
+
+    # 4. Employee submits 2-day Annual Leave -> PENDING routed to Dr. Aziz Manager
+    emp_sub = client.post(
+        "/api/v1/requests/submit",
+        json={
+            "device_fingerprint": emp_fp,
+            "device_token": emp_token,
+            "request_category": "LEAVE",
+            "request_subtype": "ANNUAL",
+            "start_date": tomorrow_local,
+            "end_date": tomorrow_local,
+            "reason": "مراجعة شخصية",
+        },
+    )
+    assert emp_sub.status_code == 201
+    req_data = emp_sub.json()["request"]
+    req_id = req_data["id"]
+    assert req_data["status"] == "PENDING"
+    assert req_data["assigned_manager_id"] == "emp-mgr"
+    assert "Dr. Aziz Manager" in emp_sub.json()["message"]
+
+    # 5. Employee CANNOT approve their own request (403)
+    self_app = client.post(
+        f"/api/v1/requests/team/{req_id}/review",
+        json={"device_fingerprint": emp_fp, "device_token": emp_token, "decision": "APPROVED"},
+    )
+    assert self_app.status_code == 403
+
+    # 6. Unrelated colleague CANNOT approve another employee's request (403)
+    oth_app = client.post(
+        f"/api/v1/requests/team/{req_id}/review",
+        json={"device_fingerprint": "fp_other_employee_002", "device_token": oth_raw_tok, "decision": "APPROVED"},
+    )
+    assert oth_app.status_code == 403
+
+    # 7. Direct Manager sees pending requests in team-pending and APPROVES it -> balance drops 21 -> 20!
+    team_list = client.post(
+        "/api/v1/requests/team-pending",
+        json={"device_fingerprint": "fp_direct_manager_001", "device_token": mgr_raw_tok},
+    )
+    assert team_list.status_code == 200
+    assert team_list.json()["is_manager"] is True
+    assert team_list.json()["team_pending_count"] == 2
+
+    mgr_app = client.post(
+        f"/api/v1/requests/team/{req_id}/review",
+        json={
+            "device_fingerprint": "fp_direct_manager_001",
+            "device_token": mgr_raw_tok,
+            "decision": "APPROVED",
+            "manager_notes": "موافق بالتوفيق",
+        },
+    )
+    assert mgr_app.status_code == 200, mgr_app.text
+    approved_req = mgr_app.json()["request"]
+    assert approved_req["status"] == "APPROVED"
+    assert approved_req["manager_decision"] == "APPROVED"
+    assert approved_req["employee_annual_balance"] == 20.0
+    assert "Dr. Aziz Manager" in approved_req["reviewed_by"]
+    assert approved_req["manager_notes"] == "موافق بالتوفيق"

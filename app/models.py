@@ -97,6 +97,10 @@ class Employee(Base):
     enrollment_token_hash = Column(String(128), nullable=True)
     enrollment_token_expires_at = Column(DateTime, nullable=True)
 
+    # Direct Manager Hierarchy (Self-Referential: each employee reports to a direct manager)
+    manager_id = Column(String(36), ForeignKey("employees.id"), nullable=True, index=True)
+    manager = relationship("Employee", remote_side=[id], foreign_keys=[manager_id])
+
     # Leave Balances (Egyptian Labor Law defaults: 21 Annual, 6 Casual, 15 Sick)
     annual_leave_balance = Column(Float, default=21.0, nullable=False)
     casual_leave_balance = Column(Float, default=6.0, nullable=False)
@@ -107,7 +111,7 @@ class Employee(Base):
 
     attendance_logs = relationship("AttendanceLog", back_populates="employee")
     challenges = relationship("LivenessChallenge", back_populates="employee")
-    hr_requests = relationship("HRRequest", back_populates="employee")
+    hr_requests = relationship("HRRequest", foreign_keys="HRRequest.employee_id", back_populates="employee")
 
 
 class LivenessChallenge(Base):
@@ -210,13 +214,21 @@ class HRRequest(Base):
     location_name = Column(String(200), nullable=True)  # Destination for missions
     reason = Column(Text, nullable=True)
 
+    # Direct Manager Approval Workflow (No auto-approval; routed to employee's direct manager)
+    assigned_manager_id = Column(String(36), ForeignKey("employees.id"), nullable=True, index=True)
+    manager_decision = Column(String(20), default="PENDING", nullable=False)  # 'PENDING' | 'APPROVED' | 'REJECTED'
+    manager_reviewed_by = Column(String(120), nullable=True)
+    manager_reviewed_at = Column(DateTime, nullable=True)
+    manager_notes = Column(Text, nullable=True)
+
     # 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
     status = Column(String(20), default="PENDING", nullable=False, index=True)
     admin_notes = Column(Text, nullable=True)
-    reviewed_by = Column(String(80), nullable=True)
+    reviewed_by = Column(String(120), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     balance_deducted = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=utc_now, index=True)
 
-    employee = relationship("Employee", back_populates="hr_requests")
+    employee = relationship("Employee", foreign_keys=[employee_id], back_populates="hr_requests")
+    assigned_manager = relationship("Employee", foreign_keys=[assigned_manager_id])

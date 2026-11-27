@@ -266,6 +266,13 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
     raw_email = (payload.email or "").strip().lower()
     email = raw_email if raw_email else f"{code.lower()}@walaahr.local"
 
+    manager_id_val = None
+    if payload.manager_id and payload.manager_id.strip():
+        mgr = db.query(Employee).filter(Employee.id == payload.manager_id.strip(), Employee.is_active == True).first()
+        if not mgr:
+            raise HTTPException(status_code=400, detail="المدير المباشر المختار غير موجود أو غير نشط.")
+        manager_id_val = mgr.id
+
     existing = db.query(Employee).filter(Employee.employee_code == code).first()
     if existing:
         if not existing.is_active:
@@ -277,6 +284,7 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
                 existing.email = raw_email
             existing.phone = payload.phone.strip() if payload.phone else existing.phone
             existing.department = payload.department.strip() if payload.department else (existing.department or "العام")
+            existing.manager_id = manager_id_val if manager_id_val != existing.id else None
             existing.is_active = True
             existing.is_face_enrolled = False
             existing.face_embedding = None
@@ -292,6 +300,7 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
                 "email": existing.email,
                 "phone": existing.phone,
                 "department": existing.department,
+                "manager_id": existing.manager_id,
                 "bound_device_id": existing.bound_device_id,
                 "is_face_enrolled": existing.is_face_enrolled,
                 "face_model_version": existing.face_model_version,
@@ -316,6 +325,7 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         email=email,
         phone=payload.phone.strip() if payload.phone else None,
         department=payload.department.strip() if payload.department else "العام",
+        manager_id=manager_id_val,
         enrollment_token_hash=code_hash,
         enrollment_token_expires_at=expires_at,
         is_active=True,
@@ -331,6 +341,7 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         "email": employee.email,
         "phone": employee.phone,
         "department": employee.department,
+        "manager_id": employee.manager_id,
         "bound_device_id": employee.bound_device_id,
         "is_face_enrolled": employee.is_face_enrolled,
         "face_model_version": employee.face_model_version,
@@ -342,10 +353,14 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
 
 @router.get("/employees")
 def list_employees(include_inactive: bool = False, db: Session = Depends(get_db)):
-    q = db.query(Employee).options(joinedload(Employee.bound_device))
+    q = db.query(Employee).options(joinedload(Employee.bound_device), joinedload(Employee.manager))
     if not include_inactive:
         q = q.filter(Employee.is_active == True)
     emps = q.order_by(Employee.created_at.desc()).all()
+    sub_counts: dict[str, int] = {}
+    for e in emps:
+        if e.is_active and e.manager_id:
+            sub_counts[e.manager_id] = sub_counts.get(e.manager_id, 0) + 1
     return [
         {
             "id": e.id,
@@ -354,6 +369,10 @@ def list_employees(include_inactive: bool = False, db: Session = Depends(get_db)
             "email": e.email,
             "phone": e.phone,
             "department": e.department,
+            "manager_id": e.manager_id,
+            "manager_name": e.manager.full_name if e.manager else None,
+            "manager_code": e.manager.employee_code if e.manager else None,
+            "subordinates_count": sub_counts.get(e.id, 0),
             "bound_device_id": e.bound_device_id,
             "bound_device_model": e.bound_device.device_model if e.bound_device else None,
             "bound_device_os": f"{e.bound_device.os_name} {e.bound_device.os_version}" if e.bound_device else None,
@@ -393,6 +412,17 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
         emp.phone = updates["phone"].strip() if updates["phone"] else None
     if "department" in updates:
         emp.department = updates["department"].strip() if updates["department"] else "العام"
+    if "manager_id" in updates:
+        raw_mgr = (updates["manager_id"] or "").strip()
+        if not raw_mgr:
+            emp.manager_id = None
+        else:
+            if raw_mgr == emp.id:
+                raise HTTPException(status_code=400, detail="لا يمكن تعيين الموظف كمدير مباشر لنفسه.")
+            mgr = db.query(Employee).filter(Employee.id == raw_mgr, Employee.is_active == True).first()
+            if not mgr:
+                raise HTTPException(status_code=400, detail="المدير المباشر المختار غير موجود أو غير نشط.")
+            emp.manager_id = mgr.id
     if "annual_leave_balance" in updates and updates["annual_leave_balance"] is not None:
         emp.annual_leave_balance = round(float(updates["annual_leave_balance"]), 2)
     if "casual_leave_balance" in updates and updates["casual_leave_balance"] is not None:
@@ -406,6 +436,7 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
         "id": emp.id,
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
+        "manager_id": emp.manager_id,
         "annual_leave_balance": emp.annual_leave_balance,
         "casual_leave_balance": emp.casual_leave_balance,
         "sick_leave_balance": emp.sick_leave_balance,
@@ -697,9 +728,15 @@ def export_attendance_report(
     logs = q.limit(10000).all()
 
     # Fetch HR Requests (Leaves, Permissions, Missions) matching the same filters
-    hr_q = db.query(HRRequest).options(joinedload(HRRequest.employee)).order_by(HRRequest.created_at.desc())
+    hr_q = (
+        db.query(HRRequest)
+        .options(joinedload(HRRequest.employee), joinedload(HRRequest.assigned_manager))
+        .order_by(HRRequest.created_at.desc())
+    )
     if employee_code and employee_code.strip():
-        hr_q = hr_q.join(Employee).filter(Employee.employee_code == employee_code.strip().upper())
+        hr_q = hr_q.join(Employee, HRRequest.employee_id == Employee.id).filter(
+            Employee.employee_code == employee_code.strip().upper()
+        )
     if date_from:
         hr_q = hr_q.filter(HRRequest.end_date >= date_from)
     if date_to:

@@ -817,8 +817,9 @@ def build_attendance_excel_workbook(
         "المكان / الجهة",
         "السبب",
         "الحالة",
-        "تمت المراجعة بواسطة",
-        "ملاحظات الإدارة",
+        "المدير المباشر",
+        "جهة الاعتماد الفعلية",
+        "ملاحظات المدير / الإدارة",
     ]
     last_col_4 = get_column_letter(len(headers_s4))
 
@@ -853,6 +854,7 @@ def build_attendance_excel_workbook(
             d_val = req.days_count or 1.0
             dur_str = f"{int(d_val) if float(d_val).is_integer() else d_val} يوم"
 
+        mgr_obj = req.assigned_manager or (req.employee.manager if req.employee else None)
         vals = [
             req.employee.employee_code if req.employee else "",
             req.employee.full_name if req.employee else "غير معروف",
@@ -867,13 +869,14 @@ def build_attendance_excel_workbook(
             req.location_name or "--",
             req.reason or "--",
             STATUS_LABELS_AR.get(req.status, req.status),
-            req.reviewed_by or "--",
-            req.admin_notes or "--",
+            mgr_obj.full_name if mgr_obj else "الإدارة العليا",
+            req.reviewed_by or "بانتظار الاعتماد",
+            req.manager_notes or req.admin_notes or "--",
         ]
         for c_idx, val in enumerate(vals, start=1):
             cell = ws4.cell(row=r_idx, column=c_idx, value=val)
             cell.font = BOLD_FONT if c_idx in (1, 2) else DATA_FONT
-            cell.alignment = RIGHT if c_idx in (2, 3, 5, 11, 12, 15) else CENTER
+            cell.alignment = RIGHT if c_idx in (2, 3, 5, 11, 12, 14, 15, 16) else CENTER
             cell.border = CELL_BORDER
             if r_idx % 2 == 0:
                 cell.fill = ZEBRA_FILL
@@ -899,7 +902,7 @@ def build_attendance_excel_workbook(
         ws4["A5"].alignment = CENTER
         ws4["A5"].font = SUB_FONT
 
-    widths_s4 = [13, 22, 14, 11, 20, 13, 13, 12, 11, 11, 20, 26, 14, 16, 26]
+    widths_s4 = [13, 22, 14, 11, 20, 13, 13, 12, 11, 11, 20, 24, 14, 18, 22, 26]
     for i, w in enumerate(widths_s4, start=1):
         ws4.column_dimensions[get_column_letter(i)].width = w
 

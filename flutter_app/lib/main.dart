@@ -62,14 +62,20 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   String? scannedQrToken;
   DateTime? scannedQrAt;
 
-  // HR Requests (Leaves, Permissions & Missions) State
+  // HR Requests (Leaves, Permissions & Missions) + Direct Manager Approvals State
   int _selectedTabIndex = 0;
+  int _requestsSubTab = 0; // 0 = طلباتي, 1 = طلبات فريقي
   String? activeMissionLabel;
+  String? directManagerName;
+  bool isManager = false;
+  int teamPendingCount = 0;
   bool isLoadingRequests = false;
+  bool isLoadingTeam = false;
   double balAnnual = 21.0;
   double balCasual = 6.0;
   double balSick = 15.0;
   List<dynamic> myRequests = [];
+  List<dynamic> teamRequests = [];
 
   CameraController? _controller;
 
@@ -123,6 +129,9 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
             employeeDept = data['department'] ?? "العام";
             isFaceEnrolled = data['is_face_enrolled'] ?? false;
             activeMissionLabel = data['active_mission_today']?['location'];
+            directManagerName = data['manager_name'];
+            isManager = data['is_manager'] == true;
+            teamPendingCount = (data['team_pending_count'] as num?)?.toInt() ?? 0;
             final lastPunch = data['last_punch_today'];
             challengeStatus = isFaceEnrolled
                 ? (lastPunch == 'CHECK_IN'
@@ -244,6 +253,9 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           employeeDept = data['department'] ?? "العام";
           isFaceEnrolled = data['is_face_enrolled'] ?? false;
           activeMissionLabel = data['active_mission_today']?['location'];
+          directManagerName = data['manager_name'];
+          isManager = data['is_manager'] == true;
+          teamPendingCount = (data['team_pending_count'] as num?)?.toInt() ?? 0;
           challengeStatus = isFaceEnrolled
               ? "اضغط على زر الحضور أو الانصراف لبدء فحص الوجه والحيوية"
               : "أدخل كود التفعيل الصادر من الإدارة ثم التقط صورة لوجهك";
@@ -493,11 +505,123 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           balAnnual = (bals['annual'] as num?)?.toDouble() ?? 21.0;
           balCasual = (bals['casual'] as num?)?.toDouble() ?? 6.0;
           balSick = (bals['sick'] as num?)?.toDouble() ?? 15.0;
+          directManagerName = data['manager_name'];
+          isManager = data['is_manager'] == true;
+          teamPendingCount = (data['team_pending_count'] as num?)?.toInt() ?? 0;
           myRequests = List<dynamic>.from(data['requests'] ?? []);
         });
+        if (isManager && _requestsSubTab == 1) {
+          _loadTeamRequests();
+        }
       }
     } catch (_) {} finally {
       if (mounted) setState(() => isLoadingRequests = false);
+    }
+  }
+
+  Future<void> _loadTeamRequests() async {
+    if (!mounted) return;
+    setState(() => isLoadingTeam = true);
+    try {
+      final fp = await SecurityChecker.getDeviceFingerprint();
+      final tok = await SecurityChecker.getDeviceToken(employeeCode) ??
+          await SecurityChecker.getAnySavedDeviceToken();
+      if (tok == null || tok.isEmpty) {
+        if (mounted) setState(() => isLoadingTeam = false);
+        return;
+      }
+      final res = await http
+          .post(
+            Uri.parse('$serverUrl/api/v1/requests/team-pending'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'device_fingerprint': fp, 'device_token': tok}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200 && mounted) {
+        final data = jsonDecode(utf8.decode(res.bodyBytes));
+        setState(() {
+          isManager = data['is_manager'] == true;
+          teamPendingCount = (data['team_pending_count'] as num?)?.toInt() ?? 0;
+          teamRequests = List<dynamic>.from(data['requests'] ?? []);
+        });
+      }
+    } catch (_) {} finally {
+      if (mounted) setState(() => isLoadingTeam = false);
+    }
+  }
+
+  Future<void> _openManagerReviewDialog(Map<String, dynamic> req, String decision) async {
+    final noteCtrl = TextEditingController();
+    final isApprove = decision == 'APPROVED';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text(isApprove ? "✅ اعتماد طلب موظف" : "❌ رفض طلب موظف"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                "${req['employee_name']} (${req['employee_code']})\n${req['subtype_label']} • ${req['start_date']}",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: "ملاحظة للموظف (اختياري)",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("إلغاء")),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isApprove ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(isApprove ? "تأكيد الموافقة" : "تأكيد الرفض"),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final fp = await SecurityChecker.getDeviceFingerprint();
+      final tok = await SecurityChecker.getDeviceToken(employeeCode) ??
+          await SecurityChecker.getAnySavedDeviceToken();
+      final res = await http
+          .post(
+            Uri.parse('$serverUrl/api/v1/requests/team/${req['id']}/review'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'device_fingerprint': fp,
+              'device_token': tok,
+              'decision': decision,
+              'manager_notes': noteCtrl.text.trim().isNotEmpty ? noteCtrl.text.trim() : null,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      final data = jsonDecode(utf8.decode(res.bodyBytes));
+      if (res.statusCode == 200 && data['success'] == true) {
+        if (mounted) {
+          _showDialog(isApprove ? "✅ تم الاعتماد" : "❌ تم الرفض", data['message'] ?? "تم تحديث الطلب.");
+        }
+        await _loadTeamRequests();
+      } else if (mounted) {
+        _showDialog("تنبيه", data['detail'] ?? "تعذر تنفيذ القرار.");
+      }
+    } catch (_) {
+      if (mounted) _showDialog("خطأ", "تعذر الاتصال بالسيرفر.");
     }
   }
 
@@ -923,15 +1047,23 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
                   setState(() => _selectedTabIndex = idx);
                   if (idx == 1) _loadMyRequests();
                 },
-                destinations: const [
-                  NavigationDestination(
+                destinations: [
+                  const NavigationDestination(
                     icon: Icon(Icons.fingerprint, color: Colors.white70),
                     selectedIcon: Icon(Icons.fingerprint, color: Colors.white),
                     label: 'البصمة',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.event_note, color: Colors.white70),
-                    selectedIcon: Icon(Icons.event_note, color: Colors.white),
+                    icon: Badge(
+                      isLabelVisible: teamPendingCount > 0,
+                      label: Text('$teamPendingCount'),
+                      child: const Icon(Icons.event_note, color: Colors.white70),
+                    ),
+                    selectedIcon: Badge(
+                      isLabelVisible: teamPendingCount > 0,
+                      label: Text('$teamPendingCount'),
+                      child: const Icon(Icons.event_note, color: Colors.white),
+                    ),
                     label: 'الإجازات والأذونات',
                   ),
                 ],
@@ -967,10 +1099,82 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: RefreshIndicator(
-        onRefresh: _loadMyRequests,
+        onRefresh: () async {
+          await _loadMyRequests();
+          if (isManager) await _loadTeamRequests();
+        },
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1B4B).withOpacity(0.7),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF4338CA)),
+              ),
+              child: Text(
+                directManagerName != null
+                    ? "👔 جهة اعتماد طلباتك: المدير المباشر ($directManagerName)"
+                    : "👔 جهة اعتماد طلباتك: الإدارة العليا",
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFC7D2FE), fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (isManager) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1B4B),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF3730A3)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _requestsSubTab = 0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _requestsSubTab == 0 ? const Color(0xFF4F46E5) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            "📋 طلباتي",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _requestsSubTab = 1);
+                          _loadTeamRequests();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _requestsSubTab == 1 ? const Color(0xFF4F46E5) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            "👔 طلبات فريقي ($teamPendingCount)",
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_requestsSubTab == 1 && isManager) ..._buildManagerTeamSection() else ...[
             Row(
               children: [
                 _buildBalanceCard("اعتيادي", balAnnual, Colors.lightBlueAccent),
@@ -1076,9 +1280,13 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
                         const SizedBox(height: 4),
                         Text(r['reason'].toString(), style: const TextStyle(color: Colors.white70, fontSize: 12)),
                       ],
-                      if (r['admin_notes'] != null && r['admin_notes'].toString().isNotEmpty) ...[
+                      if (r['reviewed_by'] != null && r['reviewed_by'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text("✍️ ${r['reviewed_by']}", style: const TextStyle(color: Colors.greenAccent, fontSize: 11)),
+                      ],
+                      if ((r['manager_notes'] ?? r['admin_notes']) != null && (r['manager_notes'] ?? r['admin_notes']).toString().isNotEmpty) ...[
                         const SizedBox(height: 6),
-                        Text("💬 الإدارة: ${r['admin_notes']}", style: const TextStyle(color: Colors.amberAccent, fontSize: 12)),
+                        Text("💬 ملاحظة: ${r['manager_notes'] ?? r['admin_notes']}", style: const TextStyle(color: Colors.amberAccent, fontSize: 12)),
                       ],
                       if (st == 'PENDING') ...[
                         const SizedBox(height: 8),
@@ -1095,10 +1303,135 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
                   ),
                 );
               }),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildManagerTeamSection() {
+    if (isLoadingTeam) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator(color: Color(0xFF818CF8))),
+        ),
+      ];
+    }
+    if (teamRequests.isEmpty) {
+      return [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1B4B).withOpacity(0.45),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: const Text(
+            "لا توجد طلبات من الموظفين التابعين لك حالياً.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white60, fontSize: 13),
+          ),
+        ),
+      ];
+    }
+    return teamRequests.map((raw) {
+      final r = Map<String, dynamic>.from(raw as Map);
+      final String st = (r['status'] ?? 'PENDING').toString();
+      final Color stColor = st == 'APPROVED'
+          ? Colors.greenAccent
+          : (st == 'REJECTED' ? Colors.redAccent : (st == 'PENDING' ? Colors.amberAccent : Colors.white54));
+      final String stLabel = st == 'APPROVED'
+          ? '✅ معتمد'
+          : (st == 'REJECTED' ? '❌ مرفوض' : (st == 'PENDING' ? '⏳ بانتظار قرارك' : 'ملغي'));
+      final String period = r['request_category'] == 'PERMISSION'
+          ? "${r['start_date']} • ${r['from_time'] ?? ''} - ${r['to_time'] ?? ''} (${r['duration_minutes'] ?? 0} د)"
+          : "${r['start_date']}${r['end_date'] != null && r['end_date'] != r['start_date'] ? ' ← ${r['end_date']}' : ''} (${r['days_count'] ?? 1} يوم)";
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1B4B).withOpacity(0.65),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: st == 'PENDING' ? Colors.amberAccent.withOpacity(0.7) : const Color(0xFF3730A3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    "👤 ${r['employee_name']} (${r['employee_code']})",
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: stColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: stColor.withOpacity(0.6)),
+                  ),
+                  child: Text(stLabel, style: TextStyle(color: stColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "الرصيد — اعتيادي: ${r['employee_annual_balance']} • عارضة: ${r['employee_casual_balance']} • مرضي: ${r['employee_sick_balance']}",
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+            const SizedBox(height: 6),
+            Text((r['subtype_label'] ?? '').toString(), style: const TextStyle(color: Color(0xFFC7D2FE), fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 3),
+            Text(period, style: const TextStyle(color: Color(0xFFA5B4FC), fontSize: 12)),
+            if (r['location_name'] != null && r['location_name'].toString().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text("📍 ${r['location_name']}", style: const TextStyle(color: Colors.tealAccent, fontSize: 12)),
+            ],
+            if (r['reason'] != null && r['reason'].toString().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(r['reason'].toString(), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+            if (st == 'PENDING') ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF059669),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => _openManagerReviewDialog(r, 'APPROVED'),
+                      icon: const Icon(Icons.check, size: 16),
+                      label: const Text("موافقة", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => _openManagerReviewDialog(r, 'REJECTED'),
+                      icon: const Icon(Icons.close, size: 16),
+                      label: const Text("رفض", style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildEmployeeLookupView() {

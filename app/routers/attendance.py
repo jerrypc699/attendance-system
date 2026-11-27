@@ -32,6 +32,36 @@ from app.storage import save_snapshot_from_base64
 router = APIRouter(prefix="/api/v1/attendance", tags=["Attendance Punch"])
 
 
+def _get_manager_team_stats(db: Session, emp: Employee) -> tuple[Optional[str], bool, int, int]:
+    """Returns (manager_name, is_manager, subordinates_count, team_pending_count)."""
+    mgr_name = emp.manager.full_name if emp.manager else None
+    sub_ids = [
+        row[0]
+        for row in db.query(Employee.id).filter(Employee.manager_id == emp.id, Employee.is_active == True, Employee.id != emp.id).all()
+    ]
+    if sub_ids:
+        pending_cnt = (
+            db.query(HRRequest)
+            .filter(
+                HRRequest.status == "PENDING",
+                HRRequest.employee_id != emp.id,
+                (HRRequest.assigned_manager_id == emp.id) | (HRRequest.employee_id.in_(sub_ids)),
+            )
+            .count()
+        )
+    else:
+        pending_cnt = (
+            db.query(HRRequest)
+            .filter(
+                HRRequest.status == "PENDING",
+                HRRequest.employee_id != emp.id,
+                HRRequest.assigned_manager_id == emp.id,
+            )
+            .count()
+        )
+    return mgr_name, (len(sub_ids) > 0 or pending_cnt > 0), len(sub_ids), pending_cnt
+
+
 def _get_active_mission_today(db: Session, employee_id: str, server_time: datetime, cfg: dict) -> Optional[HRRequest]:
     """Returns an APPROVED Mission covering today's local date for this employee, if any."""
     tz_offset = int(cfg.get("TIMEZONE_OFFSET_HOURS", 2))
@@ -163,11 +193,16 @@ def resolve_bound_device_session(payload: DeviceSessionRequest, db: Session = De
 
     cfg = get_runtime_settings(db)
     active_mission = _get_active_mission_today(db, emp.id, datetime.now(timezone.utc), cfg)
+    mgr_name, is_mgr, sub_cnt, team_pending = _get_manager_team_stats(db, emp)
 
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
         "department": emp.department or "العام",
+        "manager_name": mgr_name,
+        "is_manager": is_mgr,
+        "subordinates_count": sub_cnt,
+        "team_pending_count": team_pending,
         "is_face_enrolled": emp.is_face_enrolled,
         "is_device_bound": True,
         "requires_activation_code": not emp.is_face_enrolled,
@@ -209,11 +244,16 @@ def get_employee_enrollment_status(employee_code: str, db: Session = Depends(get
 
     cfg = get_runtime_settings(db)
     active_mission = _get_active_mission_today(db, emp.id, datetime.now(timezone.utc), cfg)
+    mgr_name, is_mgr, sub_cnt, team_pending = _get_manager_team_stats(db, emp)
 
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
         "department": emp.department or "العام",
+        "manager_name": mgr_name,
+        "is_manager": is_mgr,
+        "subordinates_count": sub_cnt,
+        "team_pending_count": team_pending,
         "is_face_enrolled": emp.is_face_enrolled,
         "is_device_bound": bool(emp.bound_device_id),
         "requires_activation_code": not emp.is_face_enrolled,

@@ -188,8 +188,9 @@
                     📸 البصمة
                 </button>
                 <button type="button" id="btn-mode-requests" onclick="switchMobileTab('requests')"
-                    class="py-2 rounded-xl text-xs font-extrabold text-slate-400 hover:text-white transition">
-                    📅 الإجازات والأذونات
+                    class="py-2 rounded-xl text-xs font-extrabold text-slate-400 hover:text-white transition flex items-center justify-center gap-1">
+                    <span>📅 الإجازات والأذونات</span>
+                    <span id="mob-tab-team-badge" class="hidden bg-amber-400 text-slate-950 font-black px-1.5 py-0.5 rounded-full text-[10px] leading-none">0</span>
                 </button>
             </div>
 
@@ -275,6 +276,28 @@
 
             <!-- MODE 2: LEAVES, PERMISSIONS & MISSIONS VIEW -->
             <div id="mobile-requests-view" class="hidden w-full space-y-4">
+                <!-- Direct Manager Approver Banner -->
+                <div id="mob-approver-pill"
+                    class="bg-indigo-950/60 border border-indigo-800/60 rounded-2xl px-3.5 py-2 text-center text-[11px] font-bold text-indigo-200">
+                    👔 جهة الاعتماد: <span id="mob-approver-name" class="text-white">--</span>
+                </div>
+
+                <!-- Manager Sub-Tabs (Visible ONLY for Direct Managers) -->
+                <div id="mob-req-subtabs"
+                    class="hidden grid grid-cols-2 gap-1.5 bg-slate-900 border border-indigo-800/60 p-1 rounded-2xl">
+                    <button type="button" id="btn-sub-mine" onclick="switchMobReqSubTab('mine')"
+                        class="py-2 rounded-xl text-[11px] font-extrabold bg-indigo-600 text-white shadow transition">
+                        📋 طلباتي
+                    </button>
+                    <button type="button" id="btn-sub-team" onclick="switchMobReqSubTab('team')"
+                        class="py-2 rounded-xl text-[11px] font-extrabold text-slate-300 hover:text-white transition flex items-center justify-center gap-1.5">
+                        <span>👔 طلبات فريقي</span>
+                        <span id="mob-sub-team-count" class="bg-amber-400 text-slate-950 font-black px-1.5 py-0.5 rounded-full text-[10px] leading-none">0</span>
+                    </button>
+                </div>
+
+                <!-- SUB-TAB A: MY REQUESTS -->
+                <div id="mob-sub-mine-view" class="space-y-4">
                 <!-- Leave Balance Cards -->
                 <div class="grid grid-cols-3 gap-2">
                     <div class="bg-sky-950/50 border border-sky-800/60 rounded-2xl p-3 text-center">
@@ -371,6 +394,24 @@
                         <div class="text-center text-slate-500 py-4">جارٍ التحميل...</div>
                     </div>
                 </div>
+                </div><!-- /mob-sub-mine-view -->
+
+                <!-- SUB-TAB B: DIRECT MANAGER TEAM APPROVALS -->
+                <div id="mob-sub-team-view" class="hidden space-y-3">
+                    <div class="bg-slate-900/95 border border-indigo-800/50 rounded-3xl p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="font-black text-white text-xs">👔 طلبات الموظفين التابعين لك</h4>
+                                <p class="text-[10px] text-slate-400 mt-0.5">اعتمد أو ارفض إجازات وأذونات ومأموريات فريقك مباشرة</p>
+                            </div>
+                            <button type="button" onclick="loadTeamRequests()"
+                                class="text-[11px] text-indigo-400 font-bold hover:underline">🔄 تحديث</button>
+                        </div>
+                        <div id="mob-team-requests-list" class="space-y-3 text-xs">
+                            <div class="text-center text-slate-500 py-4">جارٍ تحميل طلبات الفريق...</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -423,7 +464,7 @@
 
         // Register Service Worker for installable PWA
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js?v=5').catch(() => { });
+            navigator.serviceWorker.register('/sw.js?v=6').catch(() => { });
         }
 
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -678,6 +719,13 @@
                 missionBanner.classList.add('hidden');
             }
 
+            const tabBadge = document.getElementById('mob-tab-team-badge');
+            if (tabBadge) {
+                const tp = data.team_pending_count || 0;
+                tabBadge.innerText = tp;
+                tabBadge.classList.toggle('hidden', tp <= 0);
+            }
+
             if (data.is_face_enrolled) {
                 badge.innerHTML = '<span class="text-emerald-400">🟢 مسجلة (AI)</span>';
                 enrollBox.classList.add('hidden');
@@ -799,22 +847,43 @@
                 document.getElementById('mob-bal-casual').innerText = data.balances?.casual ?? '--';
                 document.getElementById('mob-bal-sick').innerText = data.balances?.sick ?? '--';
 
+                const approverNameEl = document.getElementById('mob-approver-name');
+                if (approverNameEl) {
+                    approverNameEl.innerText = data.manager_name
+                        ? `المدير المباشر — ${data.manager_name}`
+                        : 'الإدارة العليا';
+                }
+
+                const isMgr = Boolean(data.is_manager);
+                const tpCount = data.team_pending_count || 0;
+                document.getElementById('mob-req-subtabs').classList.toggle('hidden', !isMgr);
+                document.getElementById('mob-sub-team-count').innerText = tpCount;
+                const tabBadge = document.getElementById('mob-tab-team-badge');
+                if (tabBadge) {
+                    tabBadge.innerText = tpCount;
+                    tabBadge.classList.toggle('hidden', tpCount <= 0);
+                }
+
                 const reqs = data.requests || [];
                 if (!reqs.length) {
                     listEl.innerHTML = '<div class="text-center text-slate-500 py-5">لا توجد طلبات مسجلة حتى الآن</div>';
                     return;
                 }
                 const stMap = {
-                    PENDING: ['⏳ قيد المراجعة', 'bg-amber-950/80 text-amber-300 border-amber-700/60'],
-                    APPROVED: ['✅ مقبول', 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'],
+                    PENDING: ['⏳ بانتظار المدير المباشر', 'bg-amber-950/80 text-amber-300 border-amber-700/60'],
+                    APPROVED: ['✅ معتمد', 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'],
                     REJECTED: ['❌ مرفوض', 'bg-rose-950/80 text-rose-300 border-rose-700/60'],
                     CANCELLED: ['ملغي', 'bg-slate-800 text-slate-400 border-slate-700']
                 };
                 listEl.innerHTML = reqs.map(r => {
-                    const [stLbl, stCls] = stMap[r.status] || [r.status, 'bg-slate-800 text-slate-300 border-slate-700'];
+                    const [stLblRaw, stCls] = stMap[r.status] || [r.status, 'bg-slate-800 text-slate-300 border-slate-700'];
+                    const stLbl = (r.status === 'PENDING' && r.assigned_manager_name)
+                        ? `⏳ بانتظار ${escapeHtml(r.assigned_manager_name)}`
+                        : stLblRaw;
                     const period = r.request_category === 'PERMISSION'
                         ? `${escapeHtml(r.start_date)} • ${escapeHtml(r.from_time || '')} - ${escapeHtml(r.to_time || '')} (${r.duration_minutes || 0} د)`
                         : `${escapeHtml(r.start_date)}${r.end_date && r.end_date !== r.start_date ? ' ← ' + escapeHtml(r.end_date) : ''} (${r.days_count || 1} يوم)`;
+                    const noteTxt = r.manager_notes || r.admin_notes;
                     return `
                     <div class="bg-slate-950/75 border border-slate-800 rounded-2xl p-3 space-y-1.5">
                         <div class="flex items-center justify-between gap-2">
@@ -824,7 +893,8 @@
                         <div class="text-[11px] text-indigo-300 font-mono">${period}</div>
                         ${r.location_name ? `<div class="text-[11px] text-teal-300 font-bold">📍 ${escapeHtml(r.location_name)}</div>` : ''}
                         ${r.reason ? `<div class="text-[11px] text-slate-400">${escapeHtml(r.reason)}</div>` : ''}
-                        ${r.admin_notes ? `<div class="text-[11px] text-amber-200 bg-amber-950/40 border border-amber-800/40 rounded-lg px-2 py-1">💬 الإدارة: ${escapeHtml(r.admin_notes)}</div>` : ''}
+                        ${r.reviewed_by ? `<div class="text-[10px] text-emerald-300 font-bold">✍️ ${escapeHtml(r.reviewed_by)}</div>` : ''}
+                        ${noteTxt ? `<div class="text-[11px] text-amber-200 bg-amber-950/40 border border-amber-800/40 rounded-lg px-2 py-1">💬 ملاحظة: ${escapeHtml(noteTxt)}</div>` : ''}
                         ${r.status === 'PENDING' ? `
                             <div class="pt-1">
                                 <button type="button" onclick="cancelMobileRequest('${escapeHtml(r.id)}')"
@@ -836,6 +906,128 @@
                 }).join('');
             } catch (e) {
                 listEl.innerHTML = '<div class="text-center text-rose-400 py-4">تعذر الاتصال بالسيرفر</div>';
+            }
+        }
+
+        function switchMobReqSubTab(sub) {
+            const mineV = document.getElementById('mob-sub-mine-view');
+            const teamV = document.getElementById('mob-sub-team-view');
+            const bMine = document.getElementById('btn-sub-mine');
+            const bTeam = document.getElementById('btn-sub-team');
+            if (sub === 'team') {
+                mineV.classList.add('hidden');
+                teamV.classList.remove('hidden');
+                bMine.className = 'py-2 rounded-xl text-[11px] font-extrabold text-slate-300 hover:text-white transition';
+                bTeam.className = 'py-2 rounded-xl text-[11px] font-extrabold bg-indigo-600 text-white shadow transition flex items-center justify-center gap-1.5';
+                loadTeamRequests();
+            } else {
+                teamV.classList.add('hidden');
+                mineV.classList.remove('hidden');
+                bMine.className = 'py-2 rounded-xl text-[11px] font-extrabold bg-indigo-600 text-white shadow transition';
+                bTeam.className = 'py-2 rounded-xl text-[11px] font-extrabold text-slate-300 hover:text-white transition flex items-center justify-center gap-1.5';
+                loadMyRequests();
+            }
+        }
+
+        async function loadTeamRequests() {
+            if (!currentEmployee) return;
+            const listEl = document.getElementById('mob-team-requests-list');
+            const fp = getOrCreateDeviceFingerprint();
+            const tok = getDeviceToken(currentEmployee.employee_code) || getAnySavedDeviceToken();
+            if (!tok) return;
+            listEl.innerHTML = '<div class="text-center text-slate-400 py-4">⏳ جارٍ تحميل طلبات فريقك...</div>';
+            try {
+                const res = await fetch('/api/v1/requests/team-pending', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_fingerprint: fp, device_token: tok })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    listEl.innerHTML = `<div class="text-center text-rose-400 py-4">${escapeHtml(data.detail || 'تعذر تحميل الطلبات')}</div>`;
+                    return;
+                }
+                const tpCount = data.team_pending_count || 0;
+                document.getElementById('mob-sub-team-count').innerText = tpCount;
+                const tabBadge = document.getElementById('mob-tab-team-badge');
+                if (tabBadge) {
+                    tabBadge.innerText = tpCount;
+                    tabBadge.classList.toggle('hidden', tpCount <= 0);
+                }
+                const reqs = data.requests || [];
+                if (!reqs.length) {
+                    listEl.innerHTML = '<div class="text-center text-slate-500 py-6">لا توجد طلبات من الموظفين التابعين لك حالياً</div>';
+                    return;
+                }
+                const stMap = {
+                    PENDING: ['⏳ بانتظار قرارك', 'bg-amber-950/80 text-amber-300 border-amber-700/60'],
+                    APPROVED: ['✅ تم الاعتماد', 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'],
+                    REJECTED: ['❌ مرفوض', 'bg-rose-950/80 text-rose-300 border-rose-700/60'],
+                    CANCELLED: ['ملغي', 'bg-slate-800 text-slate-400 border-slate-700']
+                };
+                listEl.innerHTML = reqs.map(r => {
+                    const [stLbl, stCls] = stMap[r.status] || [r.status, 'bg-slate-800 text-slate-300 border-slate-700'];
+                    const period = r.request_category === 'PERMISSION'
+                        ? `${escapeHtml(r.start_date)} • ${escapeHtml(r.from_time || '')} - ${escapeHtml(r.to_time || '')} (${r.duration_minutes || 0} د)`
+                        : `${escapeHtml(r.start_date)}${r.end_date && r.end_date !== r.start_date ? ' ← ' + escapeHtml(r.end_date) : ''} (${r.days_count || 1} يوم)`;
+                    return `
+                    <div class="bg-slate-950/85 border ${r.status === 'PENDING' ? 'border-amber-600/60' : 'border-slate-800'} rounded-2xl p-3.5 space-y-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <div class="font-black text-white text-xs">👤 ${escapeHtml(r.employee_name)} <span class="font-mono text-[10px] text-indigo-400">(${escapeHtml(r.employee_code)})</span></div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">الرصيد المتاح — اعتيادي: <b>${r.employee_annual_balance}</b> • عارضة: <b>${r.employee_casual_balance}</b> • مرضي: <b>${r.employee_sick_balance}</b></div>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold shrink-0 ${stCls}">${stLbl}</span>
+                        </div>
+                        <div class="text-xs font-extrabold text-indigo-200">${escapeHtml(r.subtype_label)}</div>
+                        <div class="text-[11px] text-indigo-300 font-mono">${period}</div>
+                        ${r.location_name ? `<div class="text-[11px] text-teal-300 font-bold">📍 ${escapeHtml(r.location_name)}</div>` : ''}
+                        ${r.reason ? `<div class="text-[11px] text-slate-300 bg-slate-900/70 rounded-xl p-2">${escapeHtml(r.reason)}</div>` : ''}
+                        ${r.status === 'PENDING' ? `
+                            <input type="text" id="mgr-note-${escapeHtml(r.id)}" placeholder="ملاحظة للموظف (اختياري)..."
+                                class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-[11px]">
+                            <div class="grid grid-cols-2 gap-2 pt-1">
+                                <button type="button" onclick="reviewTeamRequest('${escapeHtml(r.id)}', 'APPROVED')"
+                                    class="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2 rounded-xl text-[11px] shadow active:scale-95 transition">
+                                    ✅ موافقة واعتماد
+                                </button>
+                                <button type="button" onclick="reviewTeamRequest('${escapeHtml(r.id)}', 'REJECTED')"
+                                    class="bg-rose-700 hover:bg-rose-600 text-white font-black py-2 rounded-xl text-[11px] shadow active:scale-95 transition">
+                                    ❌ رفض الطلب
+                                </button>
+                            </div>` : (r.manager_notes || r.admin_notes ? `<div class="text-[10px] text-amber-200">💬 ملاحظة: ${escapeHtml(r.manager_notes || r.admin_notes)}</div>` : '')}
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                listEl.innerHTML = '<div class="text-center text-rose-400 py-4">تعذر الاتصال بالسيرفر</div>';
+            }
+        }
+
+        async function reviewTeamRequest(reqId, decision) {
+            const fp = getOrCreateDeviceFingerprint();
+            const tok = getDeviceToken(currentEmployee.employee_code) || getAnySavedDeviceToken();
+            const noteEl = document.getElementById('mgr-note-' + reqId);
+            const notes = noteEl ? noteEl.value.trim() : '';
+            try {
+                const res = await fetch(`/api/v1/requests/team/${encodeURIComponent(reqId)}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_fingerprint: fp,
+                        device_token: tok,
+                        decision: decision,
+                        manager_notes: notes || null
+                    })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showResult(true, decision === 'APPROVED' ? '✅ تم الاعتماد' : '❌ تم الرفض', `<p>${escapeHtml(data.message)}</p>`);
+                    loadTeamRequests();
+                } else {
+                    showResult(false, 'تعذر تنفيذ القرار', `<p class="text-rose-400 font-bold">${escapeHtml(data.detail || 'خطأ')}</p>`);
+                }
+            } catch (err) {
+                showResult(false, 'خطأ اتصال', `<p>${escapeHtml(err.message)}</p>`);
             }
         }
 

@@ -33,9 +33,17 @@ def run_startup_migrations():
             ("face_reference_photo", "VARCHAR(255)"),
             ("enrollment_token_hash", "VARCHAR(128)"),
             ("enrollment_token_expires_at", "DATETIME"),
+            ("manager_id", "VARCHAR(36)"),
             ("annual_leave_balance", "REAL DEFAULT 21.0"),
             ("casual_leave_balance", "REAL DEFAULT 6.0"),
             ("sick_leave_balance", "REAL DEFAULT 15.0"),
+        ],
+        "hr_requests": [
+            ("assigned_manager_id", "VARCHAR(36)"),
+            ("manager_decision", "VARCHAR(20) DEFAULT 'PENDING'"),
+            ("manager_reviewed_by", "VARCHAR(120)"),
+            ("manager_reviewed_at", "DATETIME"),
+            ("manager_notes", "TEXT"),
         ],
         "liveness_challenges": [
             ("consumed_at", "DATETIME"),

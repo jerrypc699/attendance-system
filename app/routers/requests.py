@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import case
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -12,6 +13,7 @@ from app.schemas import (
     DeviceSessionRequest,
     EmployeeHRRequestCreate,
     HRRequestReview,
+    ManagerHRRequestReview,
 )
 from app.security.auth import hash_secret_token, require_admin
 from app.security.rate_limiter import limit_requests
@@ -53,6 +55,7 @@ def _iso_utc(ts: Optional[datetime]) -> Optional[str]:
 
 def _serialize_request(r: HRRequest) -> dict:
     emp = r.employee
+    mgr = r.assigned_manager or (emp.manager if emp else None)
     return {
         "id": r.id,
         "employee_id": r.employee_id,
@@ -62,6 +65,13 @@ def _serialize_request(r: HRRequest) -> dict:
         "employee_annual_balance": round(float(emp.annual_leave_balance or 0), 1) if emp else 0.0,
         "employee_casual_balance": round(float(emp.casual_leave_balance or 0), 1) if emp else 0.0,
         "employee_sick_balance": round(float(emp.sick_leave_balance or 0), 1) if emp else 0.0,
+        "assigned_manager_id": r.assigned_manager_id or (emp.manager_id if emp else None),
+        "assigned_manager_name": mgr.full_name if mgr else None,
+        "assigned_manager_code": mgr.employee_code if mgr else None,
+        "manager_decision": r.manager_decision or "PENDING",
+        "manager_reviewed_by": r.manager_reviewed_by,
+        "manager_reviewed_at": _iso_utc(r.manager_reviewed_at),
+        "manager_notes": r.manager_notes,
         "request_category": r.request_category,
         "category_label": CATEGORY_LABELS_AR.get(r.request_category, r.request_category),
         "request_subtype": r.request_subtype,
@@ -94,10 +104,24 @@ def _authenticate_bound_device(db: Session, device_fingerprint: str, device_toke
     if device.device_token_hash:
         if not device_token or not secrets.compare_digest(hash_secret_token(device_token), device.device_token_hash):
             raise HTTPException(status_code=403, detail="مفتاح توثيق الهاتف غير صالح.")
-    emp = db.query(Employee).filter(Employee.bound_device_id == device.id, Employee.is_active == True).first()
+    emp = (
+        db.query(Employee)
+        .options(joinedload(Employee.manager))
+        .filter(Employee.bound_device_id == device.id, Employee.is_active == True)
+        .first()
+    )
     if not emp:
         raise HTTPException(status_code=404, detail="الهاتف غير مربوط بأي موظف نشط.")
     return emp
+
+
+def _get_subordinate_ids(db: Session, manager_emp_id: str) -> list[str]:
+    return [
+        row[0]
+        for row in db.query(Employee.id)
+        .filter(Employee.manager_id == manager_emp_id, Employee.is_active == True, Employee.id != manager_emp_id)
+        .all()
+    ]
 
 
 def _compute_dates_and_duration(
@@ -200,15 +224,44 @@ def get_employee_requests_summary(payload: DeviceSessionRequest, db: Session = D
     emp = _authenticate_bound_device(db, payload.device_fingerprint, payload.device_token)
     reqs = (
         db.query(HRRequest)
-        .options(joinedload(HRRequest.employee))
+        .options(joinedload(HRRequest.employee), joinedload(HRRequest.assigned_manager))
         .filter(HRRequest.employee_id == emp.id)
         .order_by(HRRequest.created_at.desc())
         .limit(60)
         .all()
     )
+
+    sub_ids = _get_subordinate_ids(db, emp.id)
+    if sub_ids:
+        team_pending_count = (
+            db.query(HRRequest)
+            .filter(
+                HRRequest.status == "PENDING",
+                HRRequest.employee_id != emp.id,
+                (HRRequest.assigned_manager_id == emp.id) | (HRRequest.employee_id.in_(sub_ids)),
+            )
+            .count()
+        )
+    else:
+        team_pending_count = (
+            db.query(HRRequest)
+            .filter(
+                HRRequest.status == "PENDING",
+                HRRequest.employee_id != emp.id,
+                HRRequest.assigned_manager_id == emp.id,
+            )
+            .count()
+        )
+
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
+        "manager_id": emp.manager_id,
+        "manager_name": emp.manager.full_name if emp.manager else None,
+        "manager_code": emp.manager.employee_code if emp.manager else None,
+        "is_manager": len(sub_ids) > 0 or team_pending_count > 0,
+        "subordinates_count": len(sub_ids),
+        "team_pending_count": team_pending_count,
         "balances": {
             "annual": round(float(emp.annual_leave_balance if emp.annual_leave_balance is not None else 21.0), 1),
             "casual": round(float(emp.casual_leave_balance if emp.casual_leave_balance is not None else 6.0), 1),
@@ -246,7 +299,6 @@ def submit_employee_request(payload: EmployeeHRRequestCreate, db: Session = Depe
                 status_code=400,
                 detail=f"رصيد الإجازات العارضة المتاح ({emp.casual_leave_balance} يوم) أقل من المدة المطلوبة ({days_count} يوم).",
             )
-        # Prevent overlapping pending/approved leave on same dates
         overlap = (
             db.query(HRRequest)
             .filter(
@@ -267,8 +319,11 @@ def submit_employee_request(payload: EmployeeHRRequestCreate, db: Session = Depe
     if payload.request_category == "MISSION" and not (payload.location_name or "").strip():
         raise HTTPException(status_code=400, detail="يرجى كتابة مكان / جهة المأمورية.")
 
+    # Strictly NO auto-approval: always PENDING and routed to the employee's direct manager
     req = HRRequest(
         employee_id=emp.id,
+        assigned_manager_id=emp.manager_id,
+        manager_decision="PENDING",
         request_category=payload.request_category,
         request_subtype=payload.request_subtype,
         start_date=s_date,
@@ -285,9 +340,13 @@ def submit_employee_request(payload: EmployeeHRRequestCreate, db: Session = Depe
     db.commit()
     db.refresh(req)
     req.employee = emp
+    req.assigned_manager = emp.manager
+
+    sub_lbl = SUBTYPE_LABELS_AR.get(req.request_subtype, req.request_subtype)
+    approver_txt = f"مديرك المباشر ({emp.manager.full_name})" if emp.manager else "الإدارة"
     return {
         "success": True,
-        "message": f"تم إرسال طلب {SUBTYPE_LABELS_AR.get(req.request_subtype, req.request_subtype)} بنجاح وهو الآن قيد مراجعة الإدارة.",
+        "message": f"تم إرسال طلب {sub_lbl} بنجاح وهو الآن بانتظار اعتماد {approver_txt}.",
         "request": _serialize_request(req),
     }
 
@@ -306,6 +365,113 @@ def cancel_employee_pending_request(request_id: str, payload: DeviceSessionReque
 
 
 # ==============================================================================
+# DIRECT MANAGER APPROVAL ENDPOINTS (Secured by Manager's Bound Phone + Token)
+# ==============================================================================
+@router.post(
+    "/api/v1/requests/team-pending",
+    dependencies=[Depends(limit_requests("mgr_team_read", max_requests=40, window_seconds=60))],
+)
+def get_manager_team_requests(payload: DeviceSessionRequest, db: Session = Depends(get_db)):
+    """Returns pending & recent requests of direct subordinates for this manager to approve/reject."""
+    manager_emp = _authenticate_bound_device(db, payload.device_fingerprint, payload.device_token)
+    sub_ids = _get_subordinate_ids(db, manager_emp.id)
+
+    q = (
+        db.query(HRRequest)
+        .options(joinedload(HRRequest.employee), joinedload(HRRequest.assigned_manager))
+        .filter(HRRequest.employee_id != manager_emp.id)
+    )
+    if sub_ids:
+        q = q.filter((HRRequest.assigned_manager_id == manager_emp.id) | (HRRequest.employee_id.in_(sub_ids)))
+    else:
+        q = q.filter(HRRequest.assigned_manager_id == manager_emp.id)
+
+    pending_first = case((HRRequest.status == "PENDING", 0), else_=1)
+    items = q.order_by(pending_first.asc(), HRRequest.created_at.desc()).limit(100).all()
+    pending_cnt = sum(1 for r in items if r.status == "PENDING")
+
+    return {
+        "manager_name": manager_emp.full_name,
+        "manager_code": manager_emp.employee_code,
+        "is_manager": len(sub_ids) > 0 or len(items) > 0,
+        "subordinates_count": len(sub_ids),
+        "team_pending_count": pending_cnt,
+        "requests": [_serialize_request(r) for r in items],
+    }
+
+
+@router.post(
+    "/api/v1/requests/team/{request_id}/review",
+    dependencies=[Depends(limit_requests("mgr_team_review", max_requests=30, window_seconds=60))],
+)
+def direct_manager_review_request(
+    request_id: str,
+    payload: ManagerHRRequestReview,
+    db: Session = Depends(get_db),
+):
+    """
+    Allows an employee's DIRECT MANAGER to approve or reject leaves, permissions, and missions
+    directly from their bound mobile phone. Strictly blocks self-approval and unauthorized employees.
+    """
+    manager_emp = _authenticate_bound_device(db, payload.device_fingerprint, payload.device_token)
+    req = (
+        db.query(HRRequest)
+        .options(joinedload(HRRequest.employee), joinedload(HRRequest.assigned_manager))
+        .filter(HRRequest.id == request_id)
+        .first()
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود.")
+
+    if req.employee_id == manager_emp.id:
+        raise HTTPException(status_code=403, detail="لا يمكنك اعتماد أو مراجعة طلبك الشخصي بنفسك!")
+
+    is_direct_mgr = (
+        req.assigned_manager_id == manager_emp.id
+        or (req.employee is not None and req.employee.manager_id == manager_emp.id)
+    )
+    if not is_direct_mgr:
+        raise HTTPException(
+            status_code=403,
+            detail="غير مصرح لك بمراجعة هذا الطلب — الاعتماد من صلاحية المدير المباشر للموظف فقط.",
+        )
+
+    if req.status != "PENDING":
+        raise HTTPException(status_code=400, detail=f"تمت مراجعة هذا الطلب مسبقاً (الحالة الحالية: {req.status}).")
+
+    now = datetime.now(timezone.utc)
+    if payload.decision == "APPROVED" and req.employee:
+        _apply_leave_balance_deduction(req.employee, req)
+
+    note_clean = payload.manager_notes.strip() if payload.manager_notes else None
+    mgr_label = f"المدير المباشر: {manager_emp.full_name} ({manager_emp.employee_code})"
+
+    req.assigned_manager_id = manager_emp.id
+    req.manager_decision = payload.decision
+    req.manager_reviewed_by = f"{manager_emp.full_name} ({manager_emp.employee_code})"
+    req.manager_reviewed_at = now
+    req.manager_notes = note_clean
+    req.status = payload.decision
+    req.reviewed_by = mgr_label
+    req.reviewed_at = now
+    if note_clean:
+        req.admin_notes = note_clean
+
+    db.commit()
+    db.refresh(req)
+
+    return {
+        "success": True,
+        "message": (
+            f"تم اعتماد طلب {req.employee.full_name if req.employee else ''} بنجاح ✅"
+            if payload.decision == "APPROVED"
+            else f"تم رفض طلب {req.employee.full_name if req.employee else ''}."
+        ),
+        "request": _serialize_request(req),
+    }
+
+
+# ==============================================================================
 # ADMIN HR MANAGEMENT ENDPOINTS (Protected by JWT require_admin)
 # ==============================================================================
 @router.get("/api/v1/admin/requests", dependencies=[Depends(require_admin)])
@@ -316,13 +482,19 @@ def admin_list_requests(
     limit: int = Query(default=150, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
-    q = db.query(HRRequest).options(joinedload(HRRequest.employee)).order_by(HRRequest.created_at.desc())
+    q = (
+        db.query(HRRequest)
+        .options(joinedload(HRRequest.employee).joinedload(Employee.manager), joinedload(HRRequest.assigned_manager))
+        .order_by(HRRequest.created_at.desc())
+    )
     if category in ("LEAVE", "PERMISSION", "MISSION"):
         q = q.filter(HRRequest.request_category == category)
     if status_filter in ("PENDING", "APPROVED", "REJECTED", "CANCELLED"):
         q = q.filter(HRRequest.status == status_filter)
     if employee_code and employee_code.strip():
-        q = q.join(Employee).filter(Employee.employee_code == employee_code.strip().upper())
+        q = q.join(Employee, HRRequest.employee_id == Employee.id).filter(
+            Employee.employee_code == employee_code.strip().upper()
+        )
 
     items = q.limit(limit).all()
     pending_count = db.query(HRRequest).filter(HRRequest.status == "PENDING").count()
@@ -338,7 +510,12 @@ def admin_create_request(
     admin: AdminUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    emp = db.query(Employee).filter(Employee.employee_code == payload.employee_code.strip().upper(), Employee.is_active == True).first()
+    emp = (
+        db.query(Employee)
+        .options(joinedload(Employee.manager))
+        .filter(Employee.employee_code == payload.employee_code.strip().upper(), Employee.is_active == True)
+        .first()
+    )
     if not emp:
         raise HTTPException(status_code=404, detail="الموظف غير موجود أو غير نشط.")
 
@@ -351,8 +528,14 @@ def admin_create_request(
         payload.to_time,
     )
 
+    # Default is PENDING (sent to Direct Manager for approval — NO auto-approval!)
+    is_override_approve = bool(payload.auto_approve)
+    now = datetime.now(timezone.utc)
+
     req = HRRequest(
         employee_id=emp.id,
+        assigned_manager_id=emp.manager_id,
+        manager_decision="APPROVED" if is_override_approve else "PENDING",
         request_category=payload.request_category,
         request_subtype=payload.request_subtype,
         start_date=s_date,
@@ -363,20 +546,31 @@ def admin_create_request(
         duration_minutes=dur_mins,
         location_name=payload.location_name.strip() if payload.location_name else None,
         reason=payload.reason.strip() if payload.reason else None,
-        status="APPROVED" if payload.auto_approve else "PENDING",
+        status="APPROVED" if is_override_approve else "PENDING",
         admin_notes=payload.admin_notes.strip() if payload.admin_notes else None,
-        reviewed_by=admin.username if payload.auto_approve else None,
-        reviewed_at=datetime.now(timezone.utc) if payload.auto_approve else None,
+        reviewed_by=f"اعتماد إداري ({admin.username})" if is_override_approve else None,
+        reviewed_at=now if is_override_approve else None,
     )
 
-    if payload.auto_approve:
+    if is_override_approve:
         _apply_leave_balance_deduction(emp, req)
 
     db.add(req)
     db.commit()
     db.refresh(req)
     req.employee = emp
-    return {"success": True, "message": "تم تسجيل الطلب بنجاح.", "request": _serialize_request(req)}
+    req.assigned_manager = emp.manager
+
+    msg = (
+        "تم تسجيل واعتماد الطلب إدارياً بنجاح."
+        if is_override_approve
+        else (
+            f"تم تسجيل الطلب بنجاح وإرساله للمدير المباشر ({emp.manager.full_name}) للاعتماد."
+            if emp.manager
+            else "تم تسجيل الطلب بحالة (قيد المراجعة) بانتظار الاعتماد."
+        )
+    )
+    return {"success": True, "message": msg, "request": _serialize_request(req)}
 
 
 @router.post("/api/v1/admin/requests/{request_id}/review")
@@ -386,7 +580,12 @@ def admin_review_request(
     admin: AdminUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    req = db.query(HRRequest).options(joinedload(HRRequest.employee)).filter(HRRequest.id == request_id).first()
+    req = (
+        db.query(HRRequest)
+        .options(joinedload(HRRequest.employee), joinedload(HRRequest.assigned_manager))
+        .filter(HRRequest.id == request_id)
+        .first()
+    )
     if not req:
         raise HTTPException(status_code=404, detail="الطلب غير موجود.")
     if req.status not in ("PENDING",):
@@ -396,10 +595,17 @@ def admin_review_request(
     if payload.decision == "APPROVED" and emp:
         _apply_leave_balance_deduction(emp, req)
 
+    now = datetime.now(timezone.utc)
+    has_direct_mgr = bool(req.assigned_manager_id or (emp and emp.manager_id))
+    reviewer_label = (
+        f"اعتماد إداري استثنائي ({admin.username})" if has_direct_mgr else f"إدارة النظام ({admin.username})"
+    )
+
     req.status = payload.decision
+    req.manager_decision = payload.decision
     req.admin_notes = payload.admin_notes.strip() if payload.admin_notes else None
-    req.reviewed_by = admin.username
-    req.reviewed_at = datetime.now(timezone.utc)
+    req.reviewed_by = reviewer_label
+    req.reviewed_at = now
     db.commit()
     db.refresh(req)
     return {
@@ -423,4 +629,3 @@ def admin_delete_or_cancel_request(
     db.delete(req)
     db.commit()
     return {"success": True, "message": "تم حذف الطلب واسترجاع الرصيد (إن وُجد) بنجاح."}
-
