@@ -326,6 +326,10 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         phone=payload.phone.strip() if payload.phone else None,
         department=payload.department.strip() if payload.department else "العام",
         manager_id=manager_id_val,
+        annual_leave_balance=round(float(payload.annual_leave_balance), 2),
+        casual_leave_balance=round(float(payload.casual_leave_balance), 2),
+        sick_leave_balance=round(float(payload.sick_leave_balance), 2),
+        monthly_permission_hours=round(float(payload.monthly_permission_hours), 2),
         enrollment_token_hash=code_hash,
         enrollment_token_expires_at=expires_at,
         is_active=True,
@@ -342,6 +346,10 @@ def create_employee(payload: EmployeeCreate, db: Session = Depends(get_db)):
         "phone": employee.phone,
         "department": employee.department,
         "manager_id": employee.manager_id,
+        "annual_leave_balance": employee.annual_leave_balance,
+        "casual_leave_balance": employee.casual_leave_balance,
+        "sick_leave_balance": employee.sick_leave_balance,
+        "monthly_permission_hours": employee.monthly_permission_hours,
         "bound_device_id": employee.bound_device_id,
         "is_face_enrolled": employee.is_face_enrolled,
         "face_model_version": employee.face_model_version,
@@ -357,34 +365,81 @@ def list_employees(include_inactive: bool = False, db: Session = Depends(get_db)
     if not include_inactive:
         q = q.filter(Employee.is_active == True)
     emps = q.order_by(Employee.created_at.desc()).all()
+
+    cfg = get_runtime_settings(db)
+    tz_offset = int(cfg.get("TIMEZONE_OFFSET_HOURS", 2))
+    cur_month = (datetime.now(timezone.utc) + timedelta(hours=tz_offset)).strftime("%Y-%m")
+    cur_year = cur_month[:4]
+
+    # Aggregate approved usage per employee (leaves this year + permissions/missions this month)
+    approved_reqs = db.query(HRRequest).filter(HRRequest.status == "APPROVED").all()
+    used_annual: dict[str, float] = {}
+    used_casual: dict[str, float] = {}
+    used_sick: dict[str, float] = {}
+    used_perm_mins: dict[str, int] = {}
+    used_perm_cnt: dict[str, int] = {}
+    missions_month_cnt: dict[str, int] = {}
+
+    for r in approved_reqs:
+        eid = r.employee_id
+        if r.request_category == "LEAVE" and (r.start_date or "").startswith(cur_year):
+            if r.request_subtype == "ANNUAL":
+                used_annual[eid] = round(used_annual.get(eid, 0.0) + float(r.days_count or 0), 1)
+            elif r.request_subtype == "CASUAL":
+                used_casual[eid] = round(used_casual.get(eid, 0.0) + float(r.days_count or 0), 1)
+            elif r.request_subtype == "SICK":
+                used_sick[eid] = round(used_sick.get(eid, 0.0) + float(r.days_count or 0), 1)
+        elif r.request_category == "PERMISSION" and (r.start_date or "").startswith(cur_month):
+            used_perm_mins[eid] = used_perm_mins.get(eid, 0) + int(r.duration_minutes or 0)
+            used_perm_cnt[eid] = used_perm_cnt.get(eid, 0) + 1
+        elif r.request_category == "MISSION" and (r.start_date or "").startswith(cur_month):
+            missions_month_cnt[eid] = missions_month_cnt.get(eid, 0) + 1
+
     sub_counts: dict[str, int] = {}
     for e in emps:
         if e.is_active and e.manager_id:
             sub_counts[e.manager_id] = sub_counts.get(e.manager_id, 0) + 1
-    return [
-        {
-            "id": e.id,
-            "employee_code": e.employee_code,
-            "full_name": e.full_name,
-            "email": e.email,
-            "phone": e.phone,
-            "department": e.department,
-            "manager_id": e.manager_id,
-            "manager_name": e.manager.full_name if e.manager else None,
-            "manager_code": e.manager.employee_code if e.manager else None,
-            "subordinates_count": sub_counts.get(e.id, 0),
-            "bound_device_id": e.bound_device_id,
-            "bound_device_model": e.bound_device.device_model if e.bound_device else None,
-            "bound_device_os": f"{e.bound_device.os_name} {e.bound_device.os_version}" if e.bound_device else None,
-            "is_face_enrolled": e.is_face_enrolled,
-            "face_model_version": e.face_model_version,
-            "is_active": e.is_active,
-            "annual_leave_balance": round(float(e.annual_leave_balance if e.annual_leave_balance is not None else 21.0), 1),
-            "casual_leave_balance": round(float(e.casual_leave_balance if e.casual_leave_balance is not None else 6.0), 1),
-            "sick_leave_balance": round(float(e.sick_leave_balance if e.sick_leave_balance is not None else 15.0), 1),
-        }
-        for e in emps
-    ]
+
+    result = []
+    for e in emps:
+        quota_h = round(float(e.monthly_permission_hours if e.monthly_permission_hours is not None else 4.0), 1)
+        quota_m = int(round(quota_h * 60))
+        u_perm_m = used_perm_mins.get(e.id, 0)
+        rem_perm_m = max(0, quota_m - u_perm_m)
+        result.append(
+            {
+                "id": e.id,
+                "employee_code": e.employee_code,
+                "full_name": e.full_name,
+                "email": e.email,
+                "phone": e.phone,
+                "department": e.department,
+                "manager_id": e.manager_id,
+                "manager_name": e.manager.full_name if e.manager else None,
+                "manager_code": e.manager.employee_code if e.manager else None,
+                "subordinates_count": sub_counts.get(e.id, 0),
+                "bound_device_id": e.bound_device_id,
+                "bound_device_model": e.bound_device.device_model if e.bound_device else None,
+                "bound_device_os": f"{e.bound_device.os_name} {e.bound_device.os_version}" if e.bound_device else None,
+                "is_face_enrolled": e.is_face_enrolled,
+                "face_model_version": e.face_model_version,
+                "is_active": e.is_active,
+                "annual_leave_balance": round(float(e.annual_leave_balance if e.annual_leave_balance is not None else 21.0), 1),
+                "casual_leave_balance": round(float(e.casual_leave_balance if e.casual_leave_balance is not None else 6.0), 1),
+                "sick_leave_balance": round(float(e.sick_leave_balance if e.sick_leave_balance is not None else 15.0), 1),
+                "used_annual_days": used_annual.get(e.id, 0.0),
+                "used_casual_days": used_casual.get(e.id, 0.0),
+                "used_sick_days": used_sick.get(e.id, 0.0),
+                "monthly_permission_hours": quota_h,
+                "used_permission_minutes_month": u_perm_m,
+                "used_permission_count_month": used_perm_cnt.get(e.id, 0),
+                "remaining_permission_minutes_month": rem_perm_m,
+                "remaining_permission_hours_month": round(rem_perm_m / 60.0, 2),
+                "missions_month_count": missions_month_cnt.get(e.id, 0),
+                "permission_month": cur_month,
+            }
+        )
+    return result
 
 
 @router.patch("/employees/{employee_id}")
@@ -429,6 +484,8 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
         emp.casual_leave_balance = round(float(updates["casual_leave_balance"]), 2)
     if "sick_leave_balance" in updates and updates["sick_leave_balance"] is not None:
         emp.sick_leave_balance = round(float(updates["sick_leave_balance"]), 2)
+    if "monthly_permission_hours" in updates and updates["monthly_permission_hours"] is not None:
+        emp.monthly_permission_hours = round(float(updates["monthly_permission_hours"]), 2)
     db.commit()
     db.refresh(emp)
     return {
@@ -440,6 +497,7 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
         "annual_leave_balance": emp.annual_leave_balance,
         "casual_leave_balance": emp.casual_leave_balance,
         "sick_leave_balance": emp.sick_leave_balance,
+        "monthly_permission_hours": emp.monthly_permission_hours,
     }
 
 

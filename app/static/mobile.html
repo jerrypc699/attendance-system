@@ -298,22 +298,27 @@
 
                 <!-- SUB-TAB A: MY REQUESTS -->
                 <div id="mob-sub-mine-view" class="space-y-4">
-                <!-- Leave Balance Cards -->
-                <div class="grid grid-cols-3 gap-2">
+                <!-- Leave & Monthly Permission Balance Cards (2x2 Grid) -->
+                <div class="grid grid-cols-2 gap-2">
                     <div class="bg-sky-950/50 border border-sky-800/60 rounded-2xl p-3 text-center">
-                        <div class="text-[10px] text-sky-300 font-bold">اعتيادي</div>
+                        <div class="text-[10px] text-sky-300 font-bold">🏖️ إجازة اعتيادي</div>
                         <div id="mob-bal-annual" class="text-xl font-black text-white mt-0.5">--</div>
                         <div class="text-[9px] text-slate-400">يوم متبقي</div>
                     </div>
                     <div class="bg-amber-950/50 border border-amber-800/60 rounded-2xl p-3 text-center">
-                        <div class="text-[10px] text-amber-300 font-bold">عارضة</div>
+                        <div class="text-[10px] text-amber-300 font-bold">⚡ إجازة عارضة</div>
                         <div id="mob-bal-casual" class="text-xl font-black text-white mt-0.5">--</div>
                         <div class="text-[9px] text-slate-400">يوم متبقي</div>
                     </div>
                     <div class="bg-emerald-950/50 border border-emerald-800/60 rounded-2xl p-3 text-center">
-                        <div class="text-[10px] text-emerald-300 font-bold">مرضي</div>
+                        <div class="text-[10px] text-emerald-300 font-bold">🏥 إجازة مرضية</div>
                         <div id="mob-bal-sick" class="text-xl font-black text-white mt-0.5">--</div>
                         <div class="text-[9px] text-slate-400">يوم متبقي</div>
+                    </div>
+                    <div class="bg-purple-950/50 border border-purple-800/60 rounded-2xl p-3 text-center">
+                        <div class="text-[10px] text-purple-300 font-bold">⏰ أذونات الشهر</div>
+                        <div id="mob-bal-perm" class="text-xl font-black text-white mt-0.5">--</div>
+                        <div id="mob-bal-perm-sub" class="text-[9px] text-slate-400">ساعة متبقية</div>
                     </div>
                 </div>
 
@@ -464,7 +469,7 @@
 
         // Register Service Worker for installable PWA
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js?v=6').catch(() => { });
+            navigator.serviceWorker.register('/sw.js?v=7').catch(() => { });
         }
 
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -846,6 +851,11 @@
                 document.getElementById('mob-bal-annual').innerText = data.balances?.annual ?? '--';
                 document.getElementById('mob-bal-casual').innerText = data.balances?.casual ?? '--';
                 document.getElementById('mob-bal-sick').innerText = data.balances?.sick ?? '--';
+                const pRemH = data.balances?.permission_remaining_hours ?? data.balances?.permission_quota_hours ?? 4;
+                const pQuotaH = data.balances?.permission_quota_hours ?? 4;
+                const pUsedM = data.balances?.permission_used_minutes ?? 0;
+                document.getElementById('mob-bal-perm').innerText = `${pRemH} س`;
+                document.getElementById('mob-bal-perm-sub').innerText = `من ${pQuotaH} س (مستخدم ${pUsedM} د)`;
 
                 const approverNameEl = document.getElementById('mob-approver-name');
                 if (approverNameEl) {
@@ -975,7 +985,7 @@
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <div class="font-black text-white text-xs">👤 ${escapeHtml(r.employee_name)} <span class="font-mono text-[10px] text-indigo-400">(${escapeHtml(r.employee_code)})</span></div>
-                                <div class="text-[10px] text-slate-400 mt-0.5">الرصيد المتاح — اعتيادي: <b>${r.employee_annual_balance}</b> • عارضة: <b>${r.employee_casual_balance}</b> • مرضي: <b>${r.employee_sick_balance}</b></div>
+                                <div class="text-[10px] text-slate-400 mt-0.5">الرصيد — اعتيادي: <b>${r.employee_annual_balance}</b> • عارضة: <b>${r.employee_casual_balance}</b> • أذونات متبقية: <b class="text-purple-300">${r.employee_permission_remaining_hours ?? r.employee_permission_quota_hours ?? 4}س</b></div>
                             </div>
                             <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold shrink-0 ${stCls}">${stLbl}</span>
                         </div>

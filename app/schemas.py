@@ -108,6 +108,10 @@ class EmployeeCreate(BaseModel):
     phone: Optional[str] = None
     department: Optional[str] = None
     manager_id: Optional[str] = None
+    annual_leave_balance: float = Field(default=21.0, ge=0.0, le=365.0)
+    casual_leave_balance: float = Field(default=6.0, ge=0.0, le=60.0)
+    sick_leave_balance: float = Field(default=15.0, ge=0.0, le=365.0)
+    monthly_permission_hours: float = Field(default=4.0, ge=0.0, le=100.0)
 
 
 class EmployeeUpdate(BaseModel):
@@ -120,6 +124,7 @@ class EmployeeUpdate(BaseModel):
     annual_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=365.0)
     casual_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=60.0)
     sick_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=365.0)
+    monthly_permission_hours: Optional[float] = Field(default=None, ge=0.0, le=100.0)
 
 
 class EmployeeEnrollFace(BaseModel):

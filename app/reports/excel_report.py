@@ -212,6 +212,7 @@ def build_attendance_excel_workbook(
             "mission_days": 0,
             "annual_balance": 21.0,
             "casual_balance": 6.0,
+            "permission_quota_hours": 4.0,
         }
     )
 
@@ -226,6 +227,8 @@ def build_attendance_excel_workbook(
             s["annual_balance"] = round(float(emp_obj.annual_leave_balance), 1)
         if emp_obj.casual_leave_balance is not None:
             s["casual_balance"] = round(float(emp_obj.casual_leave_balance), 1)
+        if getattr(emp_obj, "monthly_permission_hours", None) is not None:
+            s["permission_quota_hours"] = round(float(emp_obj.monthly_permission_hours), 1)
 
     emp_leave_dates: dict[str, set] = defaultdict(set)
     emp_mission_dates: dict[str, set] = defaultdict(set)
@@ -617,6 +620,7 @@ def build_attendance_excel_workbook(
         "أيام مأموريات معتمدة",
         "رصيد اعتيادي متبقي",
         "رصيد عارضة متبقي",
+        "رصيد أذونات شهري متبقي (س)",
     ]
     last_col_2 = get_column_letter(len(headers_s2))
 
@@ -666,6 +670,7 @@ def build_attendance_excel_workbook(
             es["mission_days"],
             es["annual_balance"],
             es["casual_balance"],
+            round(max(0.0, es["permission_quota_hours"] - (es["permission_minutes"] / 60.0)), 2),
         ]
         for c_idx, val in enumerate(vals, start=1):
             cell = ws2.cell(row=r_idx, column=c_idx, value=val)
@@ -676,7 +681,7 @@ def build_attendance_excel_workbook(
                 cell.fill = ZEBRA_FILL
             if c_idx in (8, 9):
                 cell.number_format = "0.00"
-            elif c_idx in (16, 17):
+            elif c_idx in (16, 17, 18):
                 cell.number_format = "0.0"
                 cell.fill = SKY_FILL
                 cell.font = SKY_FONT
@@ -704,7 +709,7 @@ def build_attendance_excel_workbook(
                 c.alignment = CENTER
         ws2.auto_filter.ref = f"A4:{last_col_2}{end_s2}"
 
-    widths_s2 = [13, 24, 15, 12, 12, 15, 16, 16, 15, 12, 16, 13, 15, 16, 16, 15, 15]
+    widths_s2 = [13, 24, 15, 12, 12, 15, 16, 16, 15, 12, 16, 13, 15, 16, 16, 15, 15, 19]
     for i, w in enumerate(widths_s2, start=1):
         ws2.column_dimensions[get_column_letter(i)].width = w
 

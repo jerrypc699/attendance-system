@@ -851,3 +851,39 @@ def test_direct_manager_approval_workflow_no_auto_approve(setup_database):
     assert approved_req["employee_annual_balance"] == 20.0
     assert "Dr. Aziz Manager" in approved_req["reviewed_by"]
     assert approved_req["manager_notes"] == "موافق بالتوفيق"
+
+    # 8. Monthly Permission Balance Enforcement (set quota = 2.0h = 120m -> approve 90m -> 30m left -> 60m blocked!)
+    upd_perm = client.patch("/api/v1/admin/employees/emp-1", headers=headers, json={"monthly_permission_hours": 2.0})
+    assert upd_perm.status_code == 200
+    assert upd_perm.json()["monthly_permission_hours"] == 2.0
+
+    # Approve the 90-min permission created earlier (15:00 -> 16:30) by Direct Manager
+    perm_id = adm_req.json()["request"]["id"]
+    p_app = client.post(
+        f"/api/v1/requests/team/{perm_id}/review",
+        json={"device_fingerprint": "fp_direct_manager_001", "device_token": mgr_raw_tok, "decision": "APPROVED"},
+    )
+    assert p_app.status_code == 200
+
+    # Employee summary reflects 90 min used, 30 min (0.5h) remaining (if same month)
+    # Submitting a 60-min permission in the SAME month as tomorrow_local must be blocked (only 30 min left!)
+    over_perm = client.post(
+        "/api/v1/requests/submit",
+        json={
+            "device_fingerprint": emp_fp,
+            "device_token": emp_token,
+            "request_category": "PERMISSION",
+            "request_subtype": "LATE_ARRIVAL",
+            "start_date": tomorrow_local,
+            "from_time": "09:00",
+            "to_time": "10:00",
+        },
+    )
+    assert over_perm.status_code == 400
+    assert "رصيد الأذونات الشهري" in over_perm.json()["detail"]
+
+    # Admin employees endpoint exposes monthly permission balances too
+    emps_resp = client.get("/api/v1/admin/employees", headers=headers).json()
+    emp1_row = next(e for e in emps_resp if e["employee_code"] == "EMP-1001")
+    assert emp1_row["monthly_permission_hours"] == 2.0
+    assert "remaining_permission_hours_month" in emp1_row

@@ -1,5 +1,5 @@
 import secrets
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,6 +17,7 @@ from app.schemas import (
 )
 from app.security.auth import hash_secret_token, require_admin
 from app.security.rate_limiter import limit_requests
+from app.settings_store import get_runtime_settings
 
 router = APIRouter(tags=["HR Requests (Leaves, Permissions & Missions)"])
 
@@ -53,9 +54,54 @@ def _iso_utc(ts: Optional[datetime]) -> Optional[str]:
     return ts.replace(tzinfo=timezone.utc).isoformat() if ts.tzinfo is None else ts.isoformat()
 
 
-def _serialize_request(r: HRRequest) -> dict:
+def _get_permission_month_stats(db: Session, emp: Employee, month_yyyy_mm: str) -> dict:
+    quota_h = round(float(emp.monthly_permission_hours if emp.monthly_permission_hours is not None else 4.0), 1)
+    quota_m = int(round(quota_h * 60))
+    perms = (
+        db.query(HRRequest)
+        .filter(
+            HRRequest.employee_id == emp.id,
+            HRRequest.request_category == "PERMISSION",
+            HRRequest.status == "APPROVED",
+            HRRequest.start_date.like(f"{month_yyyy_mm}%"),
+        )
+        .all()
+    )
+    used_m = sum(int(p.duration_minutes or 0) for p in perms)
+    rem_m = max(0, quota_m - used_m)
+    return {
+        "month": month_yyyy_mm,
+        "quota_hours": quota_h,
+        "quota_minutes": quota_m,
+        "used_minutes": used_m,
+        "used_count": len(perms),
+        "remaining_minutes": rem_m,
+        "remaining_hours": round(rem_m / 60.0, 2),
+    }
+
+
+def _check_permission_quota(db: Session, emp: Employee, month_yyyy_mm: str, requested_minutes: int):
+    stats = _get_permission_month_stats(db, emp, month_yyyy_mm)
+    if requested_minutes > stats["remaining_minutes"]:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"رصيد الأذونات الشهري المتبقي لشهر {month_yyyy_mm} "
+                f"({stats['remaining_hours']} ساعة / {stats['remaining_minutes']} دقيقة) "
+                f"غير كافٍ لمدة الإذن المطلوبة ({requested_minutes} دقيقة)."
+            ),
+        )
+
+
+def _serialize_request(r: HRRequest, db: Optional[Session] = None) -> dict:
     emp = r.employee
     mgr = r.assigned_manager or (emp.manager if emp else None)
+    perm_quota_h = round(float(emp.monthly_permission_hours if emp and emp.monthly_permission_hours is not None else 4.0), 1)
+    perm_rem_m = None
+    if db is not None and emp is not None:
+        m_key = (r.start_date or "")[:7]
+        if len(m_key) == 7:
+            perm_rem_m = _get_permission_month_stats(db, emp, m_key)["remaining_minutes"]
     return {
         "id": r.id,
         "employee_id": r.employee_id,
@@ -65,6 +111,9 @@ def _serialize_request(r: HRRequest) -> dict:
         "employee_annual_balance": round(float(emp.annual_leave_balance or 0), 1) if emp else 0.0,
         "employee_casual_balance": round(float(emp.casual_leave_balance or 0), 1) if emp else 0.0,
         "employee_sick_balance": round(float(emp.sick_leave_balance or 0), 1) if emp else 0.0,
+        "employee_permission_quota_hours": perm_quota_h,
+        "employee_permission_remaining_minutes": perm_rem_m,
+        "employee_permission_remaining_hours": round(perm_rem_m / 60.0, 2) if perm_rem_m is not None else perm_quota_h,
         "assigned_manager_id": r.assigned_manager_id or (emp.manager_id if emp else None),
         "assigned_manager_name": mgr.full_name if mgr else None,
         "assigned_manager_code": mgr.employee_code if mgr else None,
@@ -253,6 +302,11 @@ def get_employee_requests_summary(payload: DeviceSessionRequest, db: Session = D
             .count()
         )
 
+    cfg = get_runtime_settings(db)
+    tz_offset = int(cfg.get("TIMEZONE_OFFSET_HOURS", 2))
+    cur_month = (datetime.now(timezone.utc) + timedelta(hours=tz_offset)).strftime("%Y-%m")
+    perm_stats = _get_permission_month_stats(db, emp, cur_month)
+
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
@@ -266,8 +320,13 @@ def get_employee_requests_summary(payload: DeviceSessionRequest, db: Session = D
             "annual": round(float(emp.annual_leave_balance if emp.annual_leave_balance is not None else 21.0), 1),
             "casual": round(float(emp.casual_leave_balance if emp.casual_leave_balance is not None else 6.0), 1),
             "sick": round(float(emp.sick_leave_balance if emp.sick_leave_balance is not None else 15.0), 1),
+            "permission_month": perm_stats["month"],
+            "permission_quota_hours": perm_stats["quota_hours"],
+            "permission_used_minutes": perm_stats["used_minutes"],
+            "permission_remaining_minutes": perm_stats["remaining_minutes"],
+            "permission_remaining_hours": perm_stats["remaining_hours"],
         },
-        "requests": [_serialize_request(r) for r in reqs],
+        "requests": [_serialize_request(r, db) for r in reqs],
     }
 
 
@@ -315,6 +374,9 @@ def submit_employee_request(payload: EmployeeHRRequestCreate, db: Session = Depe
                 status_code=400,
                 detail=f"لديك بالفعل طلب إجازة متداخل في نفس الفترة ({overlap.start_date} إلى {overlap.end_date}).",
             )
+
+    if payload.request_category == "PERMISSION" and dur_mins:
+        _check_permission_quota(db, emp, s_date[:7], dur_mins)
 
     if payload.request_category == "MISSION" and not (payload.location_name or "").strip():
         raise HTTPException(status_code=400, detail="يرجى كتابة مكان / جهة المأمورية.")
@@ -396,7 +458,7 @@ def get_manager_team_requests(payload: DeviceSessionRequest, db: Session = Depen
         "is_manager": len(sub_ids) > 0 or len(items) > 0,
         "subordinates_count": len(sub_ids),
         "team_pending_count": pending_cnt,
-        "requests": [_serialize_request(r) for r in items],
+        "requests": [_serialize_request(r, db) for r in items],
     }
 
 
@@ -441,6 +503,8 @@ def direct_manager_review_request(
 
     now = datetime.now(timezone.utc)
     if payload.decision == "APPROVED" and req.employee:
+        if req.request_category == "PERMISSION" and req.duration_minutes:
+            _check_permission_quota(db, req.employee, (req.start_date or "")[:7], int(req.duration_minutes))
         _apply_leave_balance_deduction(req.employee, req)
 
     note_clean = payload.manager_notes.strip() if payload.manager_notes else None
@@ -500,7 +564,7 @@ def admin_list_requests(
     pending_count = db.query(HRRequest).filter(HRRequest.status == "PENDING").count()
     return {
         "pending_count": pending_count,
-        "items": [_serialize_request(r) for r in items],
+        "items": [_serialize_request(r, db) for r in items],
     }
 
 
@@ -553,6 +617,8 @@ def admin_create_request(
     )
 
     if is_override_approve:
+        if req.request_category == "PERMISSION" and dur_mins:
+            _check_permission_quota(db, emp, s_date[:7], dur_mins)
         _apply_leave_balance_deduction(emp, req)
 
     db.add(req)
@@ -593,6 +659,8 @@ def admin_review_request(
 
     emp = req.employee
     if payload.decision == "APPROVED" and emp:
+        if req.request_category == "PERMISSION" and req.duration_minutes:
+            _check_permission_quota(db, emp, (req.start_date or "")[:7], int(req.duration_minutes))
         _apply_leave_balance_deduction(emp, req)
 
     now = datetime.now(timezone.utc)

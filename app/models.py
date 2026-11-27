@@ -101,10 +101,11 @@ class Employee(Base):
     manager_id = Column(String(36), ForeignKey("employees.id"), nullable=True, index=True)
     manager = relationship("Employee", remote_side=[id], foreign_keys=[manager_id])
 
-    # Leave Balances (Egyptian Labor Law defaults: 21 Annual, 6 Casual, 15 Sick)
+    # Leave & Monthly Permission Balances (Egyptian defaults: 21 Annual, 6 Casual, 15 Sick, 4h/month Permissions)
     annual_leave_balance = Column(Float, default=21.0, nullable=False)
     casual_leave_balance = Column(Float, default=6.0, nullable=False)
     sick_leave_balance = Column(Float, default=15.0, nullable=False)
+    monthly_permission_hours = Column(Float, default=4.0, nullable=False)
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utc_now)

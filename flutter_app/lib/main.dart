@@ -74,6 +74,9 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   double balAnnual = 21.0;
   double balCasual = 6.0;
   double balSick = 15.0;
+  double balPermRemHours = 4.0;
+  double balPermQuotaHours = 4.0;
+  int balPermUsedMinutes = 0;
   List<dynamic> myRequests = [];
   List<dynamic> teamRequests = [];
 
@@ -505,6 +508,9 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           balAnnual = (bals['annual'] as num?)?.toDouble() ?? 21.0;
           balCasual = (bals['casual'] as num?)?.toDouble() ?? 6.0;
           balSick = (bals['sick'] as num?)?.toDouble() ?? 15.0;
+          balPermQuotaHours = (bals['permission_quota_hours'] as num?)?.toDouble() ?? 4.0;
+          balPermRemHours = (bals['permission_remaining_hours'] as num?)?.toDouble() ?? balPermQuotaHours;
+          balPermUsedMinutes = (bals['permission_used_minutes'] as num?)?.toInt() ?? 0;
           directManagerName = data['manager_name'];
           isManager = data['is_manager'] == true;
           teamPendingCount = (data['team_pending_count'] as num?)?.toInt() ?? 0;
@@ -1073,8 +1079,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     );
   }
 
-  Widget _buildBalanceCard(String title, double val, Color color) {
-    final textVal = val == val.roundToDouble() ? val.toInt().toString() : val.toStringAsFixed(1);
+  Widget _buildBalanceCard(String title, String valueText, String subtitle, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -1087,13 +1092,15 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           children: [
             Text(title, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            Text(textVal, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-            const Text("يوم متبقي", style: TextStyle(color: Colors.white54, fontSize: 10)),
+            Text(valueText, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+            Text(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 10), textAlign: TextAlign.center),
           ],
         ),
       ),
     );
   }
+
+  String _fmtNum(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
   Widget _buildRequestsView() {
     return Directionality(
@@ -1177,11 +1184,22 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
             if (_requestsSubTab == 1 && isManager) ..._buildManagerTeamSection() else ...[
             Row(
               children: [
-                _buildBalanceCard("اعتيادي", balAnnual, Colors.lightBlueAccent),
+                _buildBalanceCard("🏖️ اعتيادي", _fmtNum(balAnnual), "يوم متبقي", Colors.lightBlueAccent),
                 const SizedBox(width: 8),
-                _buildBalanceCard("عارضة", balCasual, Colors.amberAccent),
+                _buildBalanceCard("⚡ عارضة", _fmtNum(balCasual), "يوم متبقي", Colors.amberAccent),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _buildBalanceCard("🏥 مرضي", _fmtNum(balSick), "يوم متبقي", Colors.greenAccent),
                 const SizedBox(width: 8),
-                _buildBalanceCard("مرضي", balSick, Colors.greenAccent),
+                _buildBalanceCard(
+                  "⏰ أذونات الشهر",
+                  "${_fmtNum(balPermRemHours)} س",
+                  "من ${_fmtNum(balPermQuotaHours)} س (مستخدم $balPermUsedMinutes د)",
+                  Colors.purpleAccent,
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -1381,7 +1399,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              "الرصيد — اعتيادي: ${r['employee_annual_balance']} • عارضة: ${r['employee_casual_balance']} • مرضي: ${r['employee_sick_balance']}",
+              "الرصيد — اعتيادي: ${r['employee_annual_balance']} • عارضة: ${r['employee_casual_balance']} • أذونات: ${r['employee_permission_remaining_hours'] ?? r['employee_permission_quota_hours'] ?? 4} س",
               style: const TextStyle(color: Colors.white60, fontSize: 11),
             ),
             const SizedBox(height: 6),
