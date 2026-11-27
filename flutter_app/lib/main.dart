@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:http/http.dart' as http;
@@ -44,7 +45,9 @@ class AttendanceHomeScreen extends StatefulWidget {
   State<AttendanceHomeScreen> createState() => _AttendanceHomeScreenState();
 }
 
-class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
+class _AttendanceHomeScreenState extends State<AttendanceHomeScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fxController;
   String serverUrl = kDefaultApiUrl;
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _activationController = TextEditingController();
@@ -85,6 +88,10 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   @override
   void initState() {
     super.initState();
+    _fxController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
     _initCamera();
     _bootstrapSession();
   }
@@ -166,6 +173,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
 
   @override
   void dispose() {
+    _fxController.dispose();
     _controller?.dispose();
     _codeController.dispose();
     _activationController.dispose();
@@ -1008,27 +1016,68 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           ),
         ],
       ),
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF030712),
       body: isAutoChecking
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: Color(0xFF818CF8)),
-                  SizedBox(height: 14),
-                  Text(
-                    "جارٍ التعرف على الهاتف المسجل...",
-                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+          ? Stack(
+              children: [
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: _fxController,
+                    builder: (_, __) => CustomPaint(
+                      painter: _CyberNeuralPainter(_fxController.value),
+                    ),
                   ),
-                ],
-              ),
+                ),
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 112,
+                        height: 112,
+                        child: AnimatedBuilder(
+                          animation: _fxController,
+                          builder: (_, __) => CustomPaint(
+                            painter: _BiometricRadarPainter(_fxController.value),
+                            child: const Center(
+                              child: Icon(Icons.fingerprint, size: 42, color: Color(0xFF22D3EE)),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        "جارٍ التعرف المشفّر على الهاتف...",
+                        style: TextStyle(color: Color(0xFF67E8F9), fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "AI Biometric Security Engine",
+                        style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 1.2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             )
           : (!isVerified
-              ? Center(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: _buildEmployeeLookupView(),
-                  ),
+              ? Stack(
+                  children: [
+                    Positioned.fill(
+                      child: AnimatedBuilder(
+                        animation: _fxController,
+                        builder: (_, __) => CustomPaint(
+                          painter: _CyberNeuralPainter(_fxController.value),
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildEmployeeLookupView(),
+                      ),
+                    ),
+                  ],
                 )
               : (_selectedTabIndex == 1 && isFaceEnrolled
                   ? _buildRequestsView()
@@ -1453,61 +1502,185 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   }
 
   Widget _buildEmployeeLookupView() {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 400),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1B4B).withOpacity(0.65),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF3730A3)),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 410),
+        padding: const EdgeInsets.all(1.8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          gradient: const LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [
+              Color(0xCC22D3EE),
+              Color(0xAA6366F1),
+              Color(0xCCA855F7),
+              Color(0x9910B981),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF4F46E5).withOpacity(0.35),
+              blurRadius: 36,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+          decoration: BoxDecoration(
+            color: const Color(0xEB070D1F),
+            borderRadius: BorderRadius.circular(26.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: SizedBox(
+                  width: 116,
+                  height: 116,
+                  child: AnimatedBuilder(
+                    animation: _fxController,
+                    builder: (_, __) => CustomPaint(
+                      painter: _BiometricRadarPainter(_fxController.value),
+                      child: Center(
+                        child: Container(
+                          width: 58,
+                          height: 58,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color: const Color(0xFF0F172A),
+                            border: Border.all(color: const Color(0xFF22D3EE).withOpacity(0.65), width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF22D3EE).withOpacity(0.35),
+                                blurRadius: 18,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(Icons.face_retouching_natural, size: 32, color: Color(0xFF67E8F9)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1B4B).withOpacity(0.9),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF22D3EE).withOpacity(0.45)),
+                  ),
+                  child: const Text(
+                    "● AI BIOMETRIC ACCESS",
+                    style: TextStyle(color: Color(0xFF67E8F9), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "بوابة الحضور الذكي للموظفين",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                "أدخل كودك الوظيفي للتحقق الآمن ببصمة الوجه والموقع الحقيقي",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _buildMiniTechChip("🤖 بصمة AI", const Color(0xFF22D3EE)),
+                  const SizedBox(width: 6),
+                  _buildMiniTechChip("🛰️ GPS حقيقي", const Color(0xFF818CF8)),
+                  const SizedBox(width: 6),
+                  _buildMiniTechChip("🔒 ربط مشفّر", const Color(0xFF34D399)),
+                ],
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: _codeController,
+                textAlign: TextAlign.center,
+                textCapitalization: TextCapitalization.characters,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                decoration: InputDecoration(
+                  hintText: "مثال: EMP-2001",
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 14, letterSpacing: 0),
+                  prefixIcon: const Icon(Icons.badge_outlined, color: Color(0xFF22D3EE)),
+                  filled: true,
+                  fillColor: const Color(0xFF0B1120),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: const Color(0xFF6366F1).withOpacity(0.55), width: 1.5),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF22D3EE), width: 2),
+                  ),
+                ),
+                onSubmitted: _fetchEmployeeData,
+              ),
+              const SizedBox(height: 18),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4F46E5), Color(0xFF2563EB), Color(0xFF06B6D4)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2563EB).withOpacity(0.45),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: isProcessing ? null : () => _fetchEmployeeData(_codeController.text),
+                  icon: isProcessing
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.lock_open_rounded),
+                  label: Text(
+                    isProcessing ? "جارٍ التحقق..." : "متابعة للدخول الآمن",
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Icon(Icons.verified_user_outlined, size: 50, color: Color(0xFF818CF8)),
-          const SizedBox(height: 12),
-          const Text(
-            "إدخال كود الموظف",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            "أدخل كودك الوظيفي للتحقق وبدء بصمة الوجه والموقع",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white60, fontSize: 12),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _codeController,
-            textAlign: TextAlign.center,
-            textCapitalization: TextCapitalization.characters,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            decoration: InputDecoration(
-              hintText: "مثال: EMP-2001",
-              hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
-              filled: true,
-              fillColor: const Color(0xFF0F172A),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-            onSubmitted: _fetchEmployeeData,
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
-            onPressed: isProcessing ? null : () => _fetchEmployeeData(_codeController.text),
-            icon: isProcessing
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.login),
-            label: const Text("متابعة", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ),
-        ],
+    );
+  }
+
+  Widget _buildMiniTechChip(String text, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
@@ -1691,4 +1864,148 @@ class QrScannerScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Animated 60fps Cyber Neural-Network & Ambient Aurora Backdrop for Login/Splash
+class _CyberNeuralPainter extends CustomPainter {
+  final double progress;
+  _CyberNeuralPainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    // Deep Space Obsidian Gradient
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [Color(0xFF030712), Color(0xFF090F26), Color(0xFF131135)],
+        ).createShader(rect),
+    );
+
+    // Subtle Drifting Tech Grid
+    final gridPaint = Paint()
+      ..color = const Color(0xFF22D3EE).withOpacity(0.055)
+      ..strokeWidth = 0.8;
+    const step = 38.0;
+    final shift = (progress * step) % step;
+    for (double x = shift; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+    for (double y = shift; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    // Pulsing Ambient Aurora Orbs
+    final t = progress * 2 * math.pi;
+    final orb1Center = Offset(size.width * 0.82 + math.sin(t) * 24, size.height * 0.16 + math.cos(t) * 18);
+    canvas.drawCircle(
+      orb1Center,
+      150,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [const Color(0xFF4F46E5).withOpacity(0.28), Colors.transparent],
+        ).createShader(Rect.fromCircle(center: orb1Center, radius: 150)),
+    );
+    final orb2Center = Offset(size.width * 0.18 + math.cos(t) * 22, size.height * 0.84 + math.sin(t) * 20);
+    canvas.drawCircle(
+      orb2Center,
+      160,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [const Color(0xFF06B6D4).withOpacity(0.22), Colors.transparent],
+        ).createShader(Rect.fromCircle(center: orb2Center, radius: 160)),
+    );
+
+    // Deterministic Floating Neural Nodes + Synaptic Lines
+    const nodeCount = 22;
+    final pts = <Offset>[];
+    for (int i = 0; i < nodeCount; i++) {
+      final seedA = (i * 1.6180339) % 1.0;
+      final seedB = (i * 0.7548776) % 1.0;
+      final px = ((seedA + math.sin(t + i * 0.9) * 0.07) % 1.0) * size.width;
+      final py = ((seedB + math.cos(t + i * 1.1) * 0.07) % 1.0) * size.height;
+      pts.add(Offset(px.clamp(0, size.width), py.clamp(0, size.height)));
+    }
+
+    final linePaint = Paint()..strokeWidth = 0.8;
+    for (int i = 0; i < pts.length; i++) {
+      for (int j = i + 1; j < pts.length; j++) {
+        final dist = (pts[i] - pts[j]).distance;
+        if (dist < 115) {
+          linePaint.color = const Color(0xFF38BDF8).withOpacity((1 - dist / 115) * 0.3);
+          canvas.drawLine(pts[i], pts[j], linePaint);
+        }
+      }
+      final nodeColor = i % 3 == 0
+          ? const Color(0xFF22D3EE)
+          : (i % 3 == 1 ? const Color(0xFF818CF8) : const Color(0xFFA855F7));
+      canvas.drawCircle(pts[i], 2.2, Paint()..color = nodeColor.withOpacity(0.85));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CyberNeuralPainter oldDelegate) => oldDelegate.progress != progress;
+}
+
+/// Animated Biometric HUD Radar Rings + Vertical Laser Scan Beam
+class _BiometricRadarPainter extends CustomPainter {
+  final double progress;
+  _BiometricRadarPainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final angle = progress * 2 * math.pi;
+
+    // Sonar Expanding Ring
+    final sonarPhase = (progress * 2) % 1.0;
+    canvas.drawCircle(
+      center,
+      radius * (0.72 + sonarPhase * 0.42),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = const Color(0xFF22D3EE).withOpacity((1.0 - sonarPhase) * 0.55),
+    );
+
+    // Outer Rotating Segmented Cyan/Indigo HUD Arcs
+    final outerRect = Rect.fromCircle(center: center, radius: radius - 3);
+    final outerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round;
+    for (int k = 0; k < 4; k++) {
+      outerPaint.color = k.isEven ? const Color(0xFF22D3EE) : const Color(0xFF818CF8);
+      canvas.drawArc(outerRect, angle + k * (math.pi / 2), math.pi / 3.2, false, outerPaint);
+    }
+
+    // Inner Counter-Rotating Precision Arcs
+    final innerRect = Rect.fromCircle(center: center, radius: radius - 11);
+    final innerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = const Color(0xFFA855F7).withOpacity(0.65);
+    for (int k = 0; k < 6; k++) {
+      canvas.drawArc(innerRect, -angle * 1.5 + k * (math.pi / 3), math.pi / 7, false, innerPaint);
+    }
+
+    // Sweeping Vertical Laser Scan Beam inside Emblem Box
+    final sweep = (math.sin(progress * 4 * math.pi) + 1) / 2; // 0..1 smooth ping-pong
+    final y = center.dy - 24 + sweep * 48;
+    final beamRect = Rect.fromLTWH(center.dx - 26, y - 1.5, 52, 3);
+    canvas.drawRect(
+      beamRect,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Colors.transparent, Color(0xFF22D3EE), Color(0xFFFFFFFF), Color(0xFF22D3EE), Colors.transparent],
+        ).createShader(beamRect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _BiometricRadarPainter oldDelegate) => oldDelegate.progress != progress;
 }

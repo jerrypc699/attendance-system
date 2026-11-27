@@ -42,10 +42,80 @@
                 transform: scale(1.02);
             }
         }
+
+        /* ==================== FUTURISTIC MOBILE LOGIN FX ==================== */
+        .mob-cyber-grid {
+            background-image:
+                linear-gradient(rgba(34, 211, 238, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+            background-size: 36px 36px;
+            animation: mobGridDrift 18s linear infinite;
+        }
+        @keyframes mobGridDrift {
+            0% { background-position: 0 0; }
+            100% { background-position: 36px 36px; }
+        }
+        @keyframes mobSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes mobSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes mobScan {
+            0%, 100% { top: 10%; opacity: 0.25; }
+            50% { top: 84%; opacity: 1; }
+        }
+        @keyframes mobSonar {
+            0% { transform: scale(0.8); opacity: 0.7; }
+            100% { transform: scale(1.55); opacity: 0; }
+        }
+        @keyframes mobHoloShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        @keyframes mobShimmer {
+            0% { transform: translateX(130%) skewX(-20deg); }
+            100% { transform: translateX(-180%) skewX(-20deg); }
+        }
+        .mob-hud-spin { animation: mobSpin 14s linear infinite; }
+        .mob-hud-spin-rev { animation: mobSpinRev 9s linear infinite; }
+        .mob-sonar { animation: mobSonar 2.6s ease-out infinite; }
+        .mob-sonar-2 { animation: mobSonar 2.6s ease-out 1.3s infinite; }
+        .mob-scan-beam {
+            position: absolute;
+            left: 12%;
+            right: 12%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #22d3ee, #818cf8, #22d3ee, transparent);
+            box-shadow: 0 0 12px 2px rgba(34, 211, 238, 0.85);
+            animation: mobScan 2.8s ease-in-out infinite;
+        }
+        .mob-holo-card {
+            padding: 1.5px;
+            border-radius: 1.8rem;
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.8), rgba(99, 102, 241, 0.55), rgba(168, 85, 247, 0.75), rgba(16, 185, 129, 0.5));
+            background-size: 240% 240%;
+            animation: mobHoloShift 6s ease infinite;
+            box-shadow: 0 0 40px rgba(79, 70, 229, 0.28), 0 20px 50px rgba(0, 0, 0, 0.7);
+        }
+        .mob-cyber-btn { position: relative; overflow: hidden; }
+        .mob-cyber-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 45%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+            animation: mobShimmer 3s infinite;
+        }
     </style>
 </head>
 
-<body class="bg-slate-950 text-white min-h-screen flex flex-col justify-between">
+<body class="bg-[#030712] text-white min-h-screen flex flex-col justify-between relative overflow-x-hidden">
+
+    <!-- Futuristic Tech Backdrop (Active on Employee Login Screen; pauses during Camera Punch for max FPS) -->
+    <div id="mob-tech-backdrop" class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <canvas id="mobile-neural-canvas" class="absolute inset-0 w-full h-full"></canvas>
+        <div class="absolute inset-0 mob-cyber-grid"></div>
+        <div class="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-indigo-600/30 blur-[100px]"></div>
+        <div class="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-cyan-500/25 blur-[100px]"></div>
+    </div>
 
     <!-- Top App Bar -->
     <header
@@ -89,7 +159,7 @@
     </div>
 
     <!-- Main Content -->
-    <main class="flex-1 px-4 py-4 flex flex-col items-center justify-start max-w-md mx-auto w-full space-y-4">
+    <main class="relative z-10 flex-1 px-4 py-4 flex flex-col items-center justify-start max-w-md mx-auto w-full space-y-4">
 
         <!-- GPS Blocking Warning if Denied/Off -->
         <div id="gps-warning"
@@ -102,39 +172,76 @@
             </button>
         </div>
 
-        <!-- STEP 1: Employee Code Lookup -->
-        <div id="step-lookup"
-            class="w-full bg-slate-900/95 border border-indigo-950/80 rounded-3xl p-5 shadow-2xl space-y-4">
-            <div class="text-center space-y-1">
-                <div class="inline-flex p-3 rounded-2xl bg-indigo-950/70 border border-indigo-800/50 text-2xl mb-1">🆔
-                </div>
-                <h2 class="text-base font-black text-white">تسجيل الدخول بالكود الوظيفي</h2>
-                <p class="text-xs text-slate-400">أدخل كود الموظف الخاص بك للتحقق من الحالة وبدء البصمة</p>
-            </div>
+        <!-- STEP 1: FUTURISTIC BIOMETRIC EMPLOYEE LOGIN -->
+        <div id="step-lookup" class="w-full my-auto py-2">
+            <div class="mob-holo-card">
+                <div class="relative bg-[#070d1f]/92 backdrop-blur-2xl rounded-[1.7rem] p-6 space-y-5 overflow-hidden">
+                    <div class="absolute top-0 inset-x-10 h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-80"></div>
 
-            <div class="space-y-3">
-                <div>
-                    <label class="block text-[11px] font-bold text-indigo-300 mb-1.5 mr-1">كود الموظف</label>
-                    <input type="text" id="emp-code-input" placeholder="مثال: EMP-2001" autocomplete="username"
-                        class="w-full bg-slate-950 border-2 border-indigo-600/50 rounded-2xl px-4 py-3.5 text-center text-white font-mono font-black text-lg uppercase tracking-wider placeholder-slate-600 focus:outline-none focus:border-indigo-400"
-                        onkeydown="if(event.key==='Enter') fetchEmployeeByCode();">
-                </div>
+                    <!-- Animated Biometric Face-ID Radar Emblem -->
+                    <div class="text-center space-y-2.5">
+                        <div class="relative w-28 h-28 mx-auto flex items-center justify-center">
+                            <div class="absolute inset-0 rounded-full border border-cyan-400/35 mob-sonar"></div>
+                            <div class="absolute inset-0 rounded-full border border-indigo-400/30 mob-sonar-2"></div>
+                            <svg class="absolute inset-0 w-full h-full mob-hud-spin" viewBox="0 0 120 120" fill="none">
+                                <circle cx="60" cy="60" r="55" stroke="url(#mobHudGrad)" stroke-width="2" stroke-dasharray="22 8 6 8" stroke-linecap="round" />
+                                <defs>
+                                    <linearGradient id="mobHudGrad" x1="0" y1="0" x2="120" y2="120">
+                                        <stop offset="0%" stop-color="#22d3ee" />
+                                        <stop offset="50%" stop-color="#6366f1" />
+                                        <stop offset="100%" stop-color="#a855f7" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <svg class="absolute inset-2.5 w-[calc(100%-1.25rem)] h-[calc(100%-1.25rem)] mob-hud-spin-rev" viewBox="0 0 100 100" fill="none">
+                                <circle cx="50" cy="50" r="44" stroke="rgba(34,211,238,0.4)" stroke-width="1.2" stroke-dasharray="3 8" />
+                            </svg>
+                            <div class="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-900/90 border border-cyan-400/50 shadow-[0_0_25px_rgba(34,211,238,0.35)] flex items-center justify-center">
+                                <img src="/icons/icon-192.png" alt="Biometric ID" class="w-12 h-12 rounded-xl object-cover">
+                                <div class="mob-scan-beam"></div>
+                            </div>
+                        </div>
 
-                <div id="quick-emp-container" class="hidden text-center">
-                    <button type="button" onclick="quickSelectEmployee()"
-                        class="text-[11px] text-indigo-300 hover:text-white bg-indigo-950/60 border border-indigo-800/60 px-3 py-1.5 rounded-xl font-bold transition inline-flex items-center gap-1.5">
-                        <span>⚡ الدخول السريع:</span>
-                        <span id="quick-emp-label" class="text-indigo-400 underline">--</span>
-                    </button>
-                </div>
+                        <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-indigo-950/90 border border-cyan-500/30 text-[10px] font-bold text-cyan-300">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <span>AI BIOMETRIC ACCESS</span>
+                        </div>
+                        <h2 class="text-lg font-black text-white tracking-tight">بوابة الحضور الذكي للموظفين</h2>
+                        <p class="text-[11px] text-slate-400">أدخل كودك الوظيفي للتحقق الآمن ببصمة الوجه والموقع الحقيقي</p>
+                    </div>
 
-                <button onclick="fetchEmployeeByCode()" id="btn-fetch-code"
-                    class="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black py-3.5 rounded-2xl text-xs shadow-xl flex items-center justify-center gap-2 active:scale-95 transition">
-                    <span>🔍</span><span>متابعة</span>
-                </button>
+                    <!-- Live Tech Status Badges -->
+                    <div class="grid grid-cols-3 gap-1.5 text-[10px] font-bold text-center">
+                        <div class="bg-slate-900/80 border border-cyan-500/20 rounded-xl py-1.5 text-cyan-300">🤖 بصمة AI</div>
+                        <div class="bg-slate-900/80 border border-indigo-500/20 rounded-xl py-1.5 text-indigo-300">🛰️ GPS حقيقي</div>
+                        <div class="bg-slate-900/80 border border-emerald-500/20 rounded-xl py-1.5 text-emerald-300">🔒 ربط مشفّر</div>
+                    </div>
 
-                <div id="lookup-error"
-                    class="hidden p-3 rounded-2xl bg-rose-950/80 border border-rose-800 text-rose-300 text-xs text-center font-bold">
+                    <div class="space-y-3.5">
+                        <div>
+                            <label class="block text-[11px] font-bold text-cyan-200 mb-1.5 mr-1">🆔 الكود الوظيفي</label>
+                            <input type="text" id="emp-code-input" placeholder="مثال: EMP-2001" autocomplete="username"
+                                class="w-full bg-slate-950/90 border-2 border-indigo-500/50 rounded-2xl px-4 py-3.5 text-center text-white font-mono font-black text-lg uppercase tracking-widest placeholder-slate-600 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition"
+                                onkeydown="if(event.key==='Enter') fetchEmployeeByCode();">
+                        </div>
+
+                        <div id="quick-emp-container" class="hidden text-center">
+                            <button type="button" onclick="quickSelectEmployee()"
+                                class="text-[11px] text-cyan-200 hover:text-white bg-indigo-950/75 border border-cyan-500/40 px-3.5 py-2 rounded-xl font-bold transition inline-flex items-center gap-1.5 shadow">
+                                <span>⚡ الدخول السريع:</span>
+                                <span id="quick-emp-label" class="text-cyan-300 underline">--</span>
+                            </button>
+                        </div>
+
+                        <button onclick="fetchEmployeeByCode()" id="btn-fetch-code"
+                            class="mob-cyber-btn w-full bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-black py-3.5 rounded-2xl text-xs shadow-[0_10px_28px_rgba(59,130,246,0.4)] flex items-center justify-center gap-2 active:scale-95 transition">
+                            <span>🔓</span><span>متابعة للدخول الآمن</span>
+                        </button>
+
+                        <div id="lookup-error"
+                            class="hidden p-3 rounded-2xl bg-rose-950/85 border border-rose-500/50 text-rose-200 text-xs text-center font-bold">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -469,7 +576,79 @@
 
         // Register Service Worker for installable PWA
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js?v=7').catch(() => { });
+            navigator.serviceWorker.register('/sw.js?v=8').catch(() => { });
+        }
+
+        // Futuristic Mobile Neural Canvas (auto-pauses once employee enters camera punch view)
+        let mobFxRaf = null;
+        function stopMobileNeuralFx() {
+            if (mobFxRaf !== null) {
+                cancelAnimationFrame(mobFxRaf);
+                mobFxRaf = null;
+            }
+            const bg = document.getElementById('mob-tech-backdrop');
+            if (bg) bg.classList.add('opacity-25');
+        }
+
+        function startMobileNeuralFx() {
+            if (mobFxRaf !== null) cancelAnimationFrame(mobFxRaf);
+            const bg = document.getElementById('mob-tech-backdrop');
+            if (bg) bg.classList.remove('opacity-25');
+            const canvas = document.getElementById('mobile-neural-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            let w = canvas.width = window.innerWidth;
+            let h = canvas.height = window.innerHeight;
+            const count = 26;
+            const colors = ['rgba(34,211,238,0.85)', 'rgba(129,140,248,0.85)', 'rgba(168,85,247,0.8)'];
+            const nodes = Array.from({ length: count }, (_, i) => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                vx: (Math.random() - 0.5) * 0.55,
+                vy: (Math.random() - 0.5) * 0.55,
+                r: 1.4 + Math.random() * 1.8,
+                c: colors[i % colors.length]
+            }));
+
+            const tick = () => {
+                const lookup = document.getElementById('step-lookup');
+                if (!lookup || lookup.classList.contains('hidden')) {
+                    stopMobileNeuralFx();
+                    return;
+                }
+                if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+                    w = canvas.width = window.innerWidth;
+                    h = canvas.height = window.innerHeight;
+                }
+                ctx.clearRect(0, 0, w, h);
+                for (let i = 0; i < nodes.length; i++) {
+                    const n = nodes[i];
+                    n.x += n.vx;
+                    n.y += n.vy;
+                    if (n.x < 0 || n.x > w) n.vx *= -1;
+                    if (n.y < 0 || n.y > h) n.vy *= -1;
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const m = nodes[j];
+                        const d = Math.hypot(n.x - m.x, n.y - m.y);
+                        if (d < 120) {
+                            ctx.beginPath();
+                            ctx.moveTo(n.x, n.y);
+                            ctx.lineTo(m.x, m.y);
+                            ctx.strokeStyle = `rgba(56,189,248,${(1 - d / 120) * 0.35})`;
+                            ctx.lineWidth = 0.85;
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+                    ctx.fillStyle = n.c;
+                    ctx.fill();
+                }
+                mobFxRaf = requestAnimationFrame(tick);
+            };
+            mobFxRaf = requestAnimationFrame(tick);
         }
 
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -757,6 +936,7 @@
             localStorage.setItem('last_employee_name', data.full_name);
 
             document.getElementById('step-lookup').classList.add('hidden');
+            stopMobileNeuralFx();
             document.getElementById('step-punch-ready').classList.remove('hidden');
             switchMobileTab('punch');
         }
@@ -1109,8 +1289,10 @@
 
         function resetEmployeeLookup() {
             currentEmployee = null;
+            stopCamera();
             document.getElementById('step-punch-ready').classList.add('hidden');
             document.getElementById('step-lookup').classList.remove('hidden');
+            startMobileNeuralFx();
         }
 
         function quickSelectEmployee() {
@@ -1354,6 +1536,7 @@
         }
 
         (async function init() {
+            startMobileNeuralFx();
             await loadPublicConfig();
             refreshGPS();
 

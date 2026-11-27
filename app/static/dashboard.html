@@ -19,43 +19,291 @@
             color: #ffffff;
             box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25);
         }
+
+        /* ==================== FUTURISTIC TECH LOGIN FX ==================== */
+        .cyber-grid-bg {
+            background-image:
+                linear-gradient(rgba(56, 189, 248, 0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+            background-size: 46px 46px;
+            animation: gridDrift 22s linear infinite;
+        }
+
+        @keyframes gridDrift {
+            0% { background-position: 0 0; }
+            100% { background-position: 46px 46px; }
+        }
+
+        @keyframes floatOrbA {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.45; }
+            50% { transform: translate(35px, -28px) scale(1.12); opacity: 0.7; }
+        }
+
+        @keyframes floatOrbB {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.35; }
+            50% { transform: translate(-40px, 32px) scale(1.15); opacity: 0.62; }
+        }
+
+        @keyframes spinSlow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes spinReverse {
+            from { transform: rotate(360deg); }
+            to { transform: rotate(0deg); }
+        }
+
+        @keyframes scanSweep {
+            0%, 100% { top: 8%; opacity: 0.2; }
+            15% { opacity: 1; }
+            50% { top: 86%; opacity: 1; }
+            85% { opacity: 1; }
+        }
+
+        @keyframes pulseSonar {
+            0% { transform: scale(0.82); opacity: 0.75; }
+            100% { transform: scale(1.48); opacity: 0; }
+        }
+
+        @keyframes shimmerSweep {
+            0% { transform: translateX(130%) skewX(-20deg); }
+            100% { transform: translateX(-180%) skewX(-20deg); }
+        }
+
+        @keyframes cardReveal {
+            from { opacity: 0; transform: translateY(18px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .orb-a { animation: floatOrbA 11s ease-in-out infinite; }
+        .orb-b { animation: floatOrbB 14s ease-in-out infinite; }
+        .hud-spin { animation: spinSlow 16s linear infinite; }
+        .hud-spin-rev { animation: spinReverse 11s linear infinite; }
+        .sonar-ping { animation: pulseSonar 2.8s cubic-bezier(0.2, 0.7, 0.3, 1) infinite; }
+        .sonar-ping-delay { animation: pulseSonar 2.8s cubic-bezier(0.2, 0.7, 0.3, 1) 1.4s infinite; }
+        .scan-beam {
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            height: 2.5px;
+            background: linear-gradient(90deg, transparent, #22d3ee, #818cf8, #22d3ee, transparent);
+            box-shadow: 0 0 14px 3px rgba(34, 211, 238, 0.8);
+            animation: scanSweep 3.2s ease-in-out infinite;
+        }
+
+        .holo-border {
+            position: relative;
+            padding: 1.5px;
+            border-radius: 1.75rem;
+            background: linear-gradient(135deg, rgba(34, 211, 238, 0.75), rgba(99, 102, 241, 0.55), rgba(168, 85, 247, 0.7), rgba(16, 185, 129, 0.55));
+            background-size: 250% 250%;
+            animation: holoShift 7s ease infinite, cardReveal 0.65s ease-out both;
+            box-shadow: 0 0 45px rgba(79, 70, 229, 0.3), 0 25px 60px rgba(0, 0, 0, 0.75);
+        }
+
+        @keyframes holoShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .cyber-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .cyber-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 45%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+            animation: shimmerSweep 3.2s infinite;
+        }
     </style>
 </head>
 
 <body class="bg-slate-100 text-slate-800 min-h-screen">
 
-    <!-- ==================== ADMIN LOGIN SCREEN ==================== -->
-    <div id="login-screen" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4">
-        <div
-            class="bg-slate-900 border border-indigo-800/60 rounded-3xl max-w-sm w-full p-7 shadow-2xl space-y-5 text-white">
-            <div class="text-center space-y-1">
-                <img src="/icons/icon-192.png" alt="Logo" class="w-16 h-16 rounded-2xl mx-auto shadow-lg mb-2">
-                <h1 class="text-xl font-black">تسجيل دخول الإدارة</h1>
-                <p class="text-xs text-slate-400">لوحة التحكم المحمية لنظام الحضور والانصراف</p>
+    <!-- ==================== FUTURISTIC TECH ADMIN LOGIN SCREEN ==================== -->
+    <div id="login-screen" class="fixed inset-0 z-50 bg-[#030712] overflow-y-auto overflow-x-hidden flex items-center justify-center p-4 sm:p-6">
+        <!-- Live Interactive Neural-Network Particle Canvas -->
+        <canvas id="login-neural-canvas" class="fixed inset-0 w-full h-full pointer-events-none"></canvas>
+        <!-- Animated Cyber Grid & Ambient Aurora Orbs -->
+        <div class="fixed inset-0 cyber-grid-bg pointer-events-none"></div>
+        <div class="fixed -top-28 -right-24 w-96 h-96 rounded-full bg-indigo-600/30 blur-[120px] orb-a pointer-events-none"></div>
+        <div class="fixed -bottom-28 -left-24 w-96 h-96 rounded-full bg-cyan-500/25 blur-[120px] orb-b pointer-events-none"></div>
+        <div class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[34rem] h-[34rem] rounded-full bg-purple-700/15 blur-[140px] pointer-events-none"></div>
+
+        <!-- Split Futuristic Stage -->
+        <div class="relative z-10 w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center my-auto py-4">
+
+            <!-- RIGHT HERO PANEL (AI Biometric Command Showcase) -->
+            <div class="hidden lg:flex lg:col-span-7 flex-col items-start justify-center space-y-6 text-white pr-2">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <span class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold backdrop-blur-md">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        <span>AI CORE ONLINE • v2.0</span>
+                    </span>
+                    <span id="login-live-clock" class="px-3.5 py-1.5 rounded-full bg-slate-900/75 border border-cyan-500/30 text-cyan-300 font-mono text-[11px] font-bold backdrop-blur-md">
+                        --:--:--
+                    </span>
+                </div>
+
+                <!-- Animated AI Biometric Scanner HUD -->
+                <div class="flex items-center gap-7">
+                    <div class="relative w-44 h-44 flex items-center justify-center shrink-0">
+                        <div class="absolute inset-0 rounded-full border border-cyan-400/30 sonar-ping"></div>
+                        <div class="absolute inset-0 rounded-full border border-indigo-400/30 sonar-ping-delay"></div>
+                        <!-- Outer Rotating SVG Telemetry Ring -->
+                        <svg class="absolute inset-0 w-full h-full hud-spin" viewBox="0 0 180 180" fill="none">
+                            <circle cx="90" cy="90" r="84" stroke="url(#hudGrad1)" stroke-width="2" stroke-dasharray="28 10 8 10" stroke-linecap="round" />
+                            <defs>
+                                <linearGradient id="hudGrad1" x1="0" y1="0" x2="180" y2="180">
+                                    <stop offset="0%" stop-color="#22d3ee" />
+                                    <stop offset="50%" stop-color="#6366f1" />
+                                    <stop offset="100%" stop-color="#a855f7" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <!-- Inner Counter-Rotating Precision Reticle -->
+                        <svg class="absolute inset-3 w-[calc(100%-1.5rem)] h-[calc(100%-1.5rem)] hud-spin-rev" viewBox="0 0 160 160" fill="none">
+                            <circle cx="80" cy="80" r="72" stroke="rgba(34,211,238,0.45)" stroke-width="1.5" stroke-dasharray="4 10" />
+                            <path d="M80 4 V16 M80 144 V156 M4 80 H16 M144 80 H156" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round" />
+                        </svg>
+                        <!-- Center Glass Crest + Laser Scan Sweep -->
+                        <div class="relative w-24 h-24 rounded-3xl overflow-hidden bg-slate-900/90 border border-cyan-400/50 shadow-[0_0_30px_rgba(34,211,238,0.3)] flex items-center justify-center">
+                            <img src="/icons/icon-192.png" alt="Logo" class="w-16 h-16 rounded-2xl object-cover">
+                            <div class="scan-beam"></div>
+                        </div>
+                        <span class="absolute -bottom-2 bg-slate-950/90 border border-cyan-500/50 text-cyan-300 font-mono text-[9px] font-bold px-2.5 py-0.5 rounded-full shadow">
+                            BIOMETRIC AI LOCK
+                        </span>
+                    </div>
+
+                    <div class="space-y-2">
+                        <h2 class="text-3xl font-black leading-tight tracking-tight">
+                            نظام الحضور الذكي
+                            <span class="block text-transparent bg-clip-text bg-gradient-to-l from-cyan-300 via-indigo-400 to-purple-400">
+                                بالذكاء الاصطناعي
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-300/90 leading-relaxed max-w-sm">
+                            منصة مؤسسية متكاملة لإدارة الحضور والانصراف، بصمة الوجه الحية، النطاق الجغرافي، الإجازات والأذونات والمأموريات باعتماد المدير المباشر.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Futuristic Telemetry Capability Cards -->
+                <div class="grid grid-cols-2 gap-3 w-full max-w-lg pt-1">
+                    <div class="bg-slate-900/60 backdrop-blur-xl border border-indigo-500/25 rounded-2xl p-3.5 flex items-center gap-3 hover:border-cyan-400/50 transition">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-400/30 flex items-center justify-center text-lg">🤖</div>
+                        <div>
+                            <div class="text-xs font-extrabold text-white">بصمة الوجه YuNet+SFace</div>
+                            <div class="text-[10px] text-slate-400">فحص حيوية ثلاثي الإطارات ضد التزوير</div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900/60 backdrop-blur-xl border border-indigo-500/25 rounded-2xl p-3.5 flex items-center gap-3 hover:border-cyan-400/50 transition">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center text-lg">🛰️</div>
+                        <div>
+                            <div class="text-xs font-extrabold text-white">Geofencing + Anti-Mock</div>
+                            <div class="text-[10px] text-slate-400">حماية GPS + IP الشركة + QR متغير</div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900/60 backdrop-blur-xl border border-indigo-500/25 rounded-2xl p-3.5 flex items-center gap-3 hover:border-cyan-400/50 transition">
+                        <div class="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-400/30 flex items-center justify-center text-lg">🔐</div>
+                        <div>
+                            <div class="text-xs font-extrabold text-white">Hardware Binding 1:1</div>
+                            <div class="text-[10px] text-slate-400">ربط مشفّر للهاتف ومنع التوقيع بالإنابة</div>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900/60 backdrop-blur-xl border border-indigo-500/25 rounded-2xl p-3.5 flex items-center gap-3 hover:border-cyan-400/50 transition">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-lg">📊</div>
+                        <div>
+                            <div class="text-xs font-extrabold text-white">إجازات وأذونات وتقارير</div>
+                            <div class="text-[10px] text-slate-400">اعتماد المدير المباشر + Excel احترافي</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <form onsubmit="submitAdminLogin(event)" class="space-y-3.5">
-                <div>
-                    <label class="block text-xs font-bold text-slate-300 mb-1">اسم المستخدم</label>
-                    <input id="login-user" type="text" required autocomplete="username" placeholder="admin"
-                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+
+            <!-- LEFT GLASSMORPHIC HOLOGRAPHIC LOGIN CARD -->
+            <div class="lg:col-span-5 w-full max-w-md mx-auto">
+                <div class="holo-border">
+                    <div class="relative bg-[#070d1f]/90 backdrop-blur-2xl rounded-[1.65rem] p-7 sm:p-8 text-white space-y-5 overflow-hidden">
+                        <!-- Subtle Top Tech Light Bar -->
+                        <div class="absolute top-0 inset-x-10 h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-80"></div>
+
+                        <div class="text-center space-y-2">
+                            <!-- Compact Biometric Crest (especially crisp on mobile/tablet) -->
+                            <div class="relative w-20 h-20 mx-auto flex items-center justify-center mb-1">
+                                <div class="absolute inset-0 rounded-full border border-cyan-400/40 hud-spin" style="border-style:dashed;"></div>
+                                <div class="relative w-16 h-16 rounded-2xl overflow-hidden border border-indigo-400/50 shadow-[0_0_25px_rgba(99,102,241,0.5)]">
+                                    <img src="/icons/icon-192.png" alt="Logo" class="w-full h-full object-cover">
+                                    <div class="scan-beam"></div>
+                                </div>
+                            </div>
+                            <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-indigo-950/90 border border-indigo-500/40 text-[10px] font-bold text-cyan-300">
+                                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                                <span>بوابة التحكم الإدارية المشفّرة</span>
+                            </div>
+                            <h1 class="text-2xl font-black tracking-tight text-white">تسجيل دخول الإدارة</h1>
+                            <p class="text-xs text-slate-400">أدخل بيانات مدير النظام للوصول إلى لوحة التحكم</p>
+                        </div>
+
+                        <form onsubmit="submitAdminLogin(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-indigo-200 mb-1.5 mr-1">اسم المستخدم</label>
+                                <div class="relative">
+                                    <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-cyan-400 text-sm pointer-events-none">👤</span>
+                                    <input id="login-user" type="text" required autocomplete="username" placeholder="admin"
+                                        class="w-full bg-slate-950/85 border border-slate-700/80 rounded-2xl pr-10 pl-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-indigo-200 mb-1.5 mr-1">كلمة المرور</label>
+                                <div class="relative">
+                                    <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-cyan-400 text-sm pointer-events-none">🔐</span>
+                                    <input id="login-pass" type="password" required autocomplete="current-password"
+                                        placeholder="••••••••"
+                                        class="w-full bg-slate-950/85 border border-slate-700/80 rounded-2xl pr-10 pl-11 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/25 transition">
+                                    <button type="button" onclick="toggleAdminPassVis()" id="btn-toggle-pass" title="إظهار / إخفاء كلمة المرور"
+                                        class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-300 text-sm px-1 transition">👁️</button>
+                                </div>
+                            </div>
+
+                            <div id="login-error"
+                                class="hidden text-xs text-rose-200 bg-rose-950/80 border border-rose-500/50 p-3 rounded-2xl text-center font-bold backdrop-blur-md">
+                            </div>
+
+                            <button type="submit" id="btn-login"
+                                class="cyber-btn w-full bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 hover:from-indigo-500 hover:via-blue-500 hover:to-cyan-400 py-3.5 rounded-2xl text-sm font-black shadow-[0_10px_30px_rgba(59,130,246,0.4)] active:scale-[0.98] transition flex items-center justify-center gap-2">
+                                <span>🔓</span>
+                                <span id="btn-login-label">دخول آمن للوحة التحكم</span>
+                            </button>
+                        </form>
+
+                        <!-- Quick App Links -->
+                        <div class="pt-4 border-t border-slate-800/80 space-y-2.5">
+                            <a href="/mobile"
+                                class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900/80 hover:bg-indigo-950/80 border border-slate-700/70 hover:border-indigo-500/60 text-xs text-cyan-300 font-bold transition">
+                                <span>📱</span>
+                                <span>الذهاب لتطبيق الموظفين (PWA — iPhone &amp; Android)</span>
+                            </a>
+                            <div class="grid grid-cols-2 gap-2">
+                                <a href="/download-apk"
+                                    class="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 font-bold transition">
+                                    <span>📲</span><span>Android APK</span>
+                                </a>
+                                <a href="/download-ios"
+                                    class="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 font-bold transition">
+                                    <span>🍎</span><span>iOS IPA</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-300 mb-1">كلمة المرور</label>
-                    <input id="login-pass" type="password" required autocomplete="current-password"
-                        placeholder="••••••••"
-                        class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
-                </div>
-                <div id="login-error"
-                    class="hidden text-xs text-rose-300 bg-rose-950/70 border border-rose-800 p-2.5 rounded-xl text-center font-bold">
-                </div>
-                <button type="submit" id="btn-login"
-                    class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl text-sm font-black shadow-lg transition">
-                    🔐 دخول لوحة التحكم
-                </button>
-            </form>
-            <div class="text-center pt-2 border-t border-slate-800">
-                <a href="/mobile" class="text-xs text-indigo-400 hover:underline font-bold">📱 الذهاب لتطبيق الموظفين
-                    (PWA)</a>
             </div>
         </div>
     </div>
@@ -1047,13 +1295,135 @@
         }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
+        // ==================== FUTURISTIC NEURAL CANVAS & LOGIN FX ====================
+        let loginFxRaf = null;
+        let loginClockTimer = null;
+
+        function toggleAdminPassVis() {
+            const inp = document.getElementById('login-pass');
+            const btn = document.getElementById('btn-toggle-pass');
+            if (!inp) return;
+            const show = inp.type === 'password';
+            inp.type = show ? 'text' : 'password';
+            if (btn) btn.innerText = show ? '🙈' : '👁️';
+        }
+
+        function stopLoginTechFx() {
+            if (loginFxRaf !== null) {
+                cancelAnimationFrame(loginFxRaf);
+                loginFxRaf = null;
+            }
+            if (loginClockTimer !== null) {
+                clearInterval(loginClockTimer);
+                loginClockTimer = null;
+            }
+        }
+
+        function startLoginTechFx() {
+            stopLoginTechFx();
+            const clockEl = document.getElementById('login-live-clock');
+            const updateClock = () => {
+                if (clockEl) {
+                    clockEl.innerText = new Date().toLocaleTimeString('ar-EG', {
+                        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                    });
+                }
+            };
+            updateClock();
+            loginClockTimer = setInterval(updateClock, 1000);
+
+            const canvas = document.getElementById('login-neural-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            let w = canvas.width = window.innerWidth;
+            let h = canvas.height = window.innerHeight;
+            const mouse = { x: -999, y: -999 };
+
+            const onResize = () => {
+                w = canvas.width = window.innerWidth;
+                h = canvas.height = window.innerHeight;
+            };
+            const onMove = (ev) => {
+                mouse.x = ev.clientX;
+                mouse.y = ev.clientY;
+            };
+            window.addEventListener('resize', onResize, { passive: true });
+            window.addEventListener('mousemove', onMove, { passive: true });
+
+            const nodeCount = Math.min(60, Math.max(28, Math.floor((w * h) / 24000)));
+            const colors = ['rgba(34,211,238,0.85)', 'rgba(129,140,248,0.85)', 'rgba(168,85,247,0.8)', 'rgba(52,211,153,0.75)'];
+            const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                vx: (Math.random() - 0.5) * 0.65,
+                vy: (Math.random() - 0.5) * 0.65,
+                r: 1.5 + Math.random() * 2.2,
+                color: colors[i % colors.length]
+            }));
+
+            const frame = () => {
+                const screen = document.getElementById('login-screen');
+                if (!screen || screen.classList.contains('hidden')) {
+                    stopLoginTechFx();
+                    window.removeEventListener('resize', onResize);
+                    window.removeEventListener('mousemove', onMove);
+                    return;
+                }
+                ctx.clearRect(0, 0, w, h);
+
+                for (let i = 0; i < nodes.length; i++) {
+                    const n = nodes[i];
+                    n.x += n.vx;
+                    n.y += n.vy;
+                    if (n.x < 0 || n.x > w) n.vx *= -1;
+                    if (n.y < 0 || n.y > h) n.vy *= -1;
+
+                    const dxm = n.x - mouse.x;
+                    const dym = n.y - mouse.y;
+                    const dm = Math.hypot(dxm, dym);
+                    if (dm < 140 && dm > 1) {
+                        ctx.beginPath();
+                        ctx.moveTo(n.x, n.y);
+                        ctx.lineTo(mouse.x, mouse.y);
+                        ctx.strokeStyle = `rgba(34, 211, 238, ${(1 - dm / 140) * 0.45})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const m = nodes[j];
+                        const dist = Math.hypot(n.x - m.x, n.y - m.y);
+                        if (dist < 145) {
+                            ctx.beginPath();
+                            ctx.moveTo(n.x, n.y);
+                            ctx.lineTo(m.x, m.y);
+                            ctx.strokeStyle = `rgba(99, 102, 241, ${(1 - dist / 145) * 0.34})`;
+                            ctx.lineWidth = 0.9;
+                            ctx.stroke();
+                        }
+                    }
+
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+                    ctx.fillStyle = n.color;
+                    ctx.fill();
+                }
+                loginFxRaf = requestAnimationFrame(frame);
+            };
+            loginFxRaf = requestAnimationFrame(frame);
+        }
+
         // ==================== AUTH ====================
         async function submitAdminLogin(e) {
             e.preventDefault();
             const errEl = document.getElementById('login-error');
             errEl.classList.add('hidden');
             const btn = document.getElementById('btn-login');
+            const btnLbl = document.getElementById('btn-login-label');
             btn.disabled = true;
+            if (btnLbl) btnLbl.innerText = 'جارٍ التحقق المشفّر...';
             try {
                 const res = await fetch('/api/v1/auth/login', {
                     method: 'POST',
@@ -1074,6 +1444,7 @@
                 sessionStorage.setItem('admin_jwt', adminToken);
                 document.getElementById('admin-welcome').innerText = data.full_name || data.username;
                 document.getElementById('login-screen').classList.add('hidden');
+                stopLoginTechFx();
                 document.getElementById('app-shell').classList.remove('hidden');
                 loadData();
             } catch (err) {
@@ -1081,6 +1452,7 @@
                 errEl.classList.remove('hidden');
             } finally {
                 btn.disabled = false;
+                if (btnLbl) btnLbl.innerText = 'دخول آمن للوحة التحكم';
             }
         }
 
@@ -1090,6 +1462,7 @@
             sessionStorage.removeItem('admin_jwt');
             document.getElementById('app-shell').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
+            startLoginTechFx();
         }
 
         async function submitChangePassword(e) {
@@ -2029,6 +2402,7 @@
         });
 
         // Boot: verify existing JWT session
+        startLoginTechFx();
         (async function boot() {
             if (!adminToken) return;
             try {
@@ -2037,6 +2411,7 @@
                     const me = await res.json();
                     document.getElementById('admin-welcome').innerText = me.full_name || me.username;
                     document.getElementById('login-screen').classList.add('hidden');
+                    stopLoginTechFx();
                     document.getElementById('app-shell').classList.remove('hidden');
                     loadData();
                 }
