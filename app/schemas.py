@@ -115,6 +115,9 @@ class EmployeeUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     department: Optional[str] = None
+    annual_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=365.0)
+    casual_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=60.0)
+    sick_leave_balance: Optional[float] = Field(default=None, ge=0.0, le=365.0)
 
 
 class EmployeeEnrollFace(BaseModel):
@@ -214,3 +217,36 @@ class PunchVerificationResponse(BaseModel):
     message: str
     rejection_reason: Optional[str] = None
     telemetry_details: Dict[str, Any] = {}
+
+
+# ----------------- HR REQUESTS (LEAVES, PERMISSIONS & MISSIONS) -----------------
+class EmployeeHRRequestCreate(BaseModel):
+    device_fingerprint: str = Field(..., min_length=8, max_length=128)
+    device_token: Optional[str] = None
+    request_category: str = Field(..., pattern="^(LEAVE|PERMISSION|MISSION)$")
+    request_subtype: str = Field(..., min_length=2, max_length=40)
+    start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    from_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    to_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    location_name: Optional[str] = Field(default=None, max_length=200)
+    reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+class AdminHRRequestCreate(BaseModel):
+    employee_code: str = Field(..., min_length=1, max_length=50)
+    request_category: str = Field(..., pattern="^(LEAVE|PERMISSION|MISSION)$")
+    request_subtype: str = Field(..., min_length=2, max_length=40)
+    start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    from_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    to_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    location_name: Optional[str] = Field(default=None, max_length=200)
+    reason: Optional[str] = Field(default=None, max_length=1000)
+    auto_approve: bool = True
+    admin_notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class HRRequestReview(BaseModel):
+    decision: str = Field(..., pattern="^(APPROVED|REJECTED)$")
+    admin_notes: Optional[str] = Field(default=None, max_length=500)

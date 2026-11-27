@@ -10,7 +10,7 @@ from sqlalchemy import inspect, text
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.models import AdminUser, Branch
-from app.routers import admin, attendance, auth
+from app.routers import admin, attendance, auth, requests as hr_requests
 from app.security.auth import hash_password
 
 
@@ -33,6 +33,9 @@ def run_startup_migrations():
             ("face_reference_photo", "VARCHAR(255)"),
             ("enrollment_token_hash", "VARCHAR(128)"),
             ("enrollment_token_expires_at", "DATETIME"),
+            ("annual_leave_balance", "REAL DEFAULT 21.0"),
+            ("casual_leave_balance", "REAL DEFAULT 6.0"),
+            ("sick_leave_balance", "REAL DEFAULT 15.0"),
         ],
         "liveness_challenges": [
             ("consumed_at", "DATETIME"),
@@ -56,6 +59,22 @@ def run_startup_migrations():
                         conn.commit()
                     except Exception:
                         conn.rollback()
+
+        # Backfill NULL leave balances on existing employee records safely
+        if inspector.has_table("employees"):
+            for col_name, default_val in (
+                ("annual_leave_balance", 21.0),
+                ("casual_leave_balance", 6.0),
+                ("sick_leave_balance", 15.0),
+            ):
+                try:
+                    conn.execute(
+                        text(f"UPDATE employees SET {col_name} = :val WHERE {col_name} IS NULL;"),
+                        {"val": default_val},
+                    )
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
 
 
 def seed_initial_admin_and_branch_secrets():
@@ -132,6 +151,7 @@ async def add_security_headers(request: Request, call_next):
 app.include_router(auth.router)
 app.include_router(attendance.router)
 app.include_router(admin.router)
+app.include_router(hr_requests.router)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 DASHBOARD_FILE = os.path.join(STATIC_DIR, "dashboard.html")
@@ -177,7 +197,11 @@ def serve_manifest():
 @app.get("/sw.js")
 def serve_service_worker():
     if os.path.exists(SW_FILE):
-        return FileResponse(SW_FILE, media_type="application/javascript")
+        return FileResponse(
+            SW_FILE,
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store, max-age=0"},
+        )
     return HTMLResponse("", media_type="application/javascript")
 
 

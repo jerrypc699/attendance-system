@@ -62,6 +62,15 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
   String? scannedQrToken;
   DateTime? scannedQrAt;
 
+  // HR Requests (Leaves, Permissions & Missions) State
+  int _selectedTabIndex = 0;
+  String? activeMissionLabel;
+  bool isLoadingRequests = false;
+  double balAnnual = 21.0;
+  double balCasual = 6.0;
+  double balSick = 15.0;
+  List<dynamic> myRequests = [];
+
   CameraController? _controller;
 
   @override
@@ -113,6 +122,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
             employeeName = data['full_name'] ?? code;
             employeeDept = data['department'] ?? "العام";
             isFaceEnrolled = data['is_face_enrolled'] ?? false;
+            activeMissionLabel = data['active_mission_today']?['location'];
             final lastPunch = data['last_punch_today'];
             challengeStatus = isFaceEnrolled
                 ? (lastPunch == 'CHECK_IN'
@@ -121,6 +131,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
                 : "أدخل كود التفعيل الصادر من الإدارة ثم التقط صورة لوجهك";
             isAutoChecking = false;
           });
+          if (isFaceEnrolled) _loadMyRequests();
           return;
         }
       }
@@ -232,10 +243,12 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           employeeName = data['full_name'] ?? cleanCode;
           employeeDept = data['department'] ?? "العام";
           isFaceEnrolled = data['is_face_enrolled'] ?? false;
+          activeMissionLabel = data['active_mission_today']?['location'];
           challengeStatus = isFaceEnrolled
               ? "اضغط على زر الحضور أو الانصراف لبدء فحص الوجه والحيوية"
               : "أدخل كود التفعيل الصادر من الإدارة ثم التقط صورة لوجهك";
         });
+        if (isFaceEnrolled) _loadMyRequests();
       } else {
         _showDialog("❌ خطأ", data['detail'] ?? "لم يتم العثور على الموظف.");
       }
@@ -293,6 +306,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
           isFaceEnrolled = true;
           challengeStatus = "جاهز لتسجيل الحضور والانصراف";
         });
+        _loadMyRequests();
         _showDialog(
           "🎉 تم تفعيل حسابك بنجاح!",
           "تم حفظ بصمة وجهك بالذكاء الاصطناعي وربط هذا الهاتف بحسابك بنجاح.",
@@ -418,9 +432,11 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
       if (punchRes.statusCode == 200 && pData['success'] == true) {
         final sim = ((pData['telemetry_details']?['face_similarity'] ?? 0) * 100).toStringAsFixed(1);
         final dist = pData['telemetry_details']?['distance_meters'] ?? '--';
+        final mission = pData['telemetry_details']?['approved_mission'];
+        final missionLine = mission != null ? "\n🚗 المأمورية: $mission" : "";
         _showDialog(
           "✅ تم اعتماد ${punchType == 'CHECK_IN' ? 'الحضور' : 'الانصراف'}!",
-          "الموظف: ${pData['employee_name']}\nالفرع: ${pData['telemetry_details']?['branch'] ?? '--'}\nالمسافة: $dist م\nتطابق الوجه (AI): $sim%",
+          "الموظف: ${pData['employee_name']}\nالفرع: ${pData['telemetry_details']?['branch'] ?? '--'}$missionLine\nالمسافة: $dist م\nتطابق الوجه (AI): $sim%",
         );
       } else {
         _showDialog("❌ تم رفض البصمة", pData['rejection_reason'] ?? pData['detail'] ?? "فشل التحقق الأمني");
@@ -450,8 +466,392 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
     );
   }
 
+  // ==================== HR REQUESTS (LEAVES, PERMISSIONS & MISSIONS) ====================
+  Future<void> _loadMyRequests() async {
+    if (!mounted) return;
+    setState(() => isLoadingRequests = true);
+    try {
+      final fp = await SecurityChecker.getDeviceFingerprint();
+      final tok = await SecurityChecker.getDeviceToken(employeeCode) ??
+          await SecurityChecker.getAnySavedDeviceToken();
+      if (tok == null || tok.isEmpty) {
+        if (mounted) setState(() => isLoadingRequests = false);
+        return;
+      }
+      final res = await http
+          .post(
+            Uri.parse('$serverUrl/api/v1/requests/my-summary'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'device_fingerprint': fp, 'device_token': tok}),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200 && mounted) {
+        final data = jsonDecode(utf8.decode(res.bodyBytes));
+        final bals = data['balances'] ?? {};
+        setState(() {
+          balAnnual = (bals['annual'] as num?)?.toDouble() ?? 21.0;
+          balCasual = (bals['casual'] as num?)?.toDouble() ?? 6.0;
+          balSick = (bals['sick'] as num?)?.toDouble() ?? 15.0;
+          myRequests = List<dynamic>.from(data['requests'] ?? []);
+        });
+      }
+    } catch (_) {} finally {
+      if (mounted) setState(() => isLoadingRequests = false);
+    }
+  }
+
+  Future<void> _cancelRequest(String requestId) async {
+    try {
+      final fp = await SecurityChecker.getDeviceFingerprint();
+      final tok = await SecurityChecker.getDeviceToken(employeeCode) ??
+          await SecurityChecker.getAnySavedDeviceToken();
+      final res = await http
+          .post(
+            Uri.parse('$serverUrl/api/v1/requests/$requestId/cancel'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'device_fingerprint': fp, 'device_token': tok}),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("تم إلغاء الطلب بنجاح")),
+          );
+        }
+        await _loadMyRequests();
+      }
+    } catch (_) {}
+  }
+
+  String _fmtDateIso(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
+  }
+
+  String _fmtTimeHHMM(TimeOfDay t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  void _openNewRequestSheet() {
+    const subtypesByCat = <String, List<Map<String, String>>>{
+      'LEAVE': [
+        {'id': 'ANNUAL', 'label': '🏖️ إجازة اعتيادية'},
+        {'id': 'CASUAL', 'label': '⚡ إجازة عارضة'},
+        {'id': 'SICK', 'label': '🏥 إجازة مرضية'},
+        {'id': 'UNPAID', 'label': '📄 إجازة بدون أجر'},
+        {'id': 'OFFICIAL', 'label': '🎖️ إجازة رسمية / خاصة'},
+      ],
+      'PERMISSION': [
+        {'id': 'LATE_ARRIVAL', 'label': '🌅 إذن تأخير صباحي'},
+        {'id': 'EARLY_LEAVE', 'label': '🌇 إذن انصراف مبكر'},
+        {'id': 'MID_DAY', 'label': '⏱️ إذن خروج أثناء العمل'},
+      ],
+      'MISSION': [
+        {'id': 'EXTERNAL_MISSION', 'label': '🚗 مأمورية عمل خارجية'},
+        {'id': 'CLIENT_VISIT', 'label': '🤝 زيارة عميل / موقع'},
+        {'id': 'REMOTE_WORK', 'label': '💻 عمل عن بُعد'},
+      ],
+    };
+
+    String category = 'LEAVE';
+    String subtype = 'ANNUAL';
+    DateTime startDate = DateTime.now();
+    DateTime endDate = DateTime.now();
+    TimeOfDay fromTime = const TimeOfDay(hour: 9, minute: 0);
+    TimeOfDay toTime = const TimeOfDay(hour: 10, minute: 30);
+    final locCtrl = TextEditingController();
+    final reasonCtrl = TextEditingController();
+    bool submitting = false;
+    String? errorMsg;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final subtypes = subtypesByCat[category]!;
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      "📝 تقديم طلب جديد",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        for (final entry in const [
+                          ['LEAVE', '🏖️ إجازة'],
+                          ['PERMISSION', '⏰ إذن'],
+                          ['MISSION', '🚗 مأمورية'],
+                        ])
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 3),
+                              child: ChoiceChip(
+                                label: Center(child: Text(entry[1], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                                selected: category == entry[0],
+                                selectedColor: const Color(0xFF4F46E5),
+                                backgroundColor: const Color(0xFF1E1B4B),
+                                labelStyle: const TextStyle(color: Colors.white),
+                                onSelected: (_) {
+                                  setSheetState(() {
+                                    category = entry[0];
+                                    subtype = subtypesByCat[category]!.first['id']!;
+                                    errorMsg = null;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: subtype,
+                      dropdownColor: const Color(0xFF1E1B4B),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: "نوع الطلب",
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        filled: true,
+                        fillColor: const Color(0xFF1E1B4B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      items: subtypes
+                          .map((s) => DropdownMenuItem(value: s['id'], child: Text(s['label']!)))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) setSheetState(() => subtype = val);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0xFF4338CA)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.calendar_today, size: 16),
+                            label: Text(
+                              "${category == 'PERMISSION' ? 'التاريخ' : 'من'}: ${_fmtDateIso(startDate)}",
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            onPressed: () async {
+                              final picked = await showDatePicker(
+                                context: ctx,
+                                initialDate: startDate,
+                                firstDate: DateTime(2024),
+                                lastDate: DateTime(2030),
+                              );
+                              if (picked != null) {
+                                setSheetState(() {
+                                  startDate = picked;
+                                  if (endDate.isBefore(startDate)) endDate = startDate;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        if (category != 'PERMISSION') ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF4338CA)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              icon: const Icon(Icons.event, size: 16),
+                              label: Text("إلى: ${_fmtDateIso(endDate)}", style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final picked = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: endDate.isBefore(startDate) ? startDate : endDate,
+                                  firstDate: startDate,
+                                  lastDate: DateTime(2030),
+                                );
+                                if (picked != null) setSheetState(() => endDate = picked);
+                              },
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (category == 'PERMISSION') ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF4338CA)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              icon: const Icon(Icons.access_time, size: 16),
+                              label: Text("من: ${_fmtTimeHHMM(fromTime)}", style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final picked = await showTimePicker(context: ctx, initialTime: fromTime);
+                                if (picked != null) setSheetState(() => fromTime = picked);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF4338CA)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              icon: const Icon(Icons.schedule, size: 16),
+                              label: Text("إلى: ${_fmtTimeHHMM(toTime)}", style: const TextStyle(fontSize: 12)),
+                              onPressed: () async {
+                                final picked = await showTimePicker(context: ctx, initialTime: toTime);
+                                if (picked != null) setSheetState(() => toTime = picked);
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (category == 'MISSION') ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: locCtrl,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: "مكان / جهة المأمورية *",
+                          hintText: "مثال: مقر العميل / بنك / مصلحة حكومية",
+                          hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                          labelStyle: const TextStyle(color: Colors.white70),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1B4B),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonCtrl,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: "السبب / التفاصيل (اختياري)",
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        filled: true,
+                        fillColor: const Color(0xFF1E1B4B),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.redAccent),
+                        ),
+                        child: Text(errorMsg!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4F46E5),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: submitting
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.send),
+                      label: Text(submitting ? "جارٍ الإرسال..." : "إرسال الطلب للإدارة", style: const TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: submitting
+                          ? null
+                          : () async {
+                              setSheetState(() {
+                                submitting = true;
+                                errorMsg = null;
+                              });
+                              try {
+                                final fp = await SecurityChecker.getDeviceFingerprint();
+                                final tok = await SecurityChecker.getDeviceToken(employeeCode) ??
+                                    await SecurityChecker.getAnySavedDeviceToken();
+                                final res = await http
+                                    .post(
+                                      Uri.parse('$serverUrl/api/v1/requests/submit'),
+                                      headers: {'Content-Type': 'application/json'},
+                                      body: jsonEncode({
+                                        'device_fingerprint': fp,
+                                        'device_token': tok,
+                                        'request_category': category,
+                                        'request_subtype': subtype,
+                                        'start_date': _fmtDateIso(startDate),
+                                        'end_date': category == 'PERMISSION' ? _fmtDateIso(startDate) : _fmtDateIso(endDate),
+                                        'from_time': category == 'PERMISSION' ? _fmtTimeHHMM(fromTime) : null,
+                                        'to_time': category == 'PERMISSION' ? _fmtTimeHHMM(toTime) : null,
+                                        'location_name': category == 'MISSION' ? locCtrl.text.trim() : null,
+                                        'reason': reasonCtrl.text.trim().isNotEmpty ? reasonCtrl.text.trim() : null,
+                                      }),
+                                    )
+                                    .timeout(const Duration(seconds: 15));
+                                final data = jsonDecode(utf8.decode(res.bodyBytes));
+                                if (res.statusCode == 201 && data['success'] == true) {
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) {
+                                    _showDialog("✅ تم إرسال الطلب", data['message'] ?? "تم إرسال طلبك بنجاح.");
+                                    await _loadMyRequests();
+                                  }
+                                } else {
+                                  setSheetState(() => errorMsg = data['detail'] ?? "تعذر إرسال الطلب");
+                                }
+                              } catch (e) {
+                                setSheetState(() => errorMsg = "تعذر الاتصال بالسيرفر");
+                              } finally {
+                                if (ctx.mounted) setSheetState(() => submitting = false);
+                              }
+                            },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool showNavTabs = isVerified && isFaceEnrolled;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -464,7 +864,10 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
         leading: isVerified
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() => isVerified = false),
+                onPressed: () => setState(() {
+                  isVerified = false;
+                  _selectedTabIndex = 0;
+                }),
               )
             : null,
         actions: [
@@ -476,9 +879,9 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
         ],
       ),
       backgroundColor: const Color(0xFF0F172A),
-      body: Center(
-        child: isAutoChecking
-            ? const Column(
+      body: isAutoChecking
+          ? const Center(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CircularProgressIndicator(color: Color(0xFF818CF8)),
@@ -488,11 +891,212 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
                     style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ],
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: !isVerified ? _buildEmployeeLookupView() : _buildPunchReadyView(),
               ),
+            )
+          : (!isVerified
+              ? Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: _buildEmployeeLookupView(),
+                  ),
+                )
+              : (_selectedTabIndex == 1 && isFaceEnrolled
+                  ? _buildRequestsView()
+                  : Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _buildPunchReadyView(),
+                      ),
+                    ))),
+      bottomNavigationBar: showNavTabs
+          ? NavigationBarTheme(
+              data: NavigationBarThemeData(
+                labelTextStyle: WidgetStateProperty.all(
+                  const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+              child: NavigationBar(
+                backgroundColor: const Color(0xFF1E1B4B),
+                indicatorColor: const Color(0xFF4338CA),
+                selectedIndex: _selectedTabIndex,
+                onDestinationSelected: (idx) {
+                  setState(() => _selectedTabIndex = idx);
+                  if (idx == 1) _loadMyRequests();
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.fingerprint, color: Colors.white70),
+                    selectedIcon: Icon(Icons.fingerprint, color: Colors.white),
+                    label: 'البصمة',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.event_note, color: Colors.white70),
+                    selectedIcon: Icon(Icons.event_note, color: Colors.white),
+                    label: 'الإجازات والأذونات',
+                  ),
+                ],
+              ),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildBalanceCard(String title, double val, Color color) {
+    final textVal = val == val.roundToDouble() ? val.toInt().toString() : val.toStringAsFixed(1);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(0.5)),
+        ),
+        child: Column(
+          children: [
+            Text(title, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(textVal, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text("يوم متبقي", style: TextStyle(color: Colors.white54, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRequestsView() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: RefreshIndicator(
+        onRefresh: _loadMyRequests,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Row(
+              children: [
+                _buildBalanceCard("اعتيادي", balAnnual, Colors.lightBlueAccent),
+                const SizedBox(width: 8),
+                _buildBalanceCard("عارضة", balCasual, Colors.amberAccent),
+                const SizedBox(width: 8),
+                _buildBalanceCard("مرضي", balSick, Colors.greenAccent),
+              ],
+            ),
+            const SizedBox(height: 14),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4F46E5),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: _openNewRequestSheet,
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text("تقديم طلب جديد (إجازة / إذن / مأمورية)", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("📋 سجل طلباتي", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                TextButton.icon(
+                  onPressed: isLoadingRequests ? null : _loadMyRequests,
+                  icon: const Icon(Icons.refresh, size: 16, color: Color(0xFF818CF8)),
+                  label: const Text("تحديث", style: TextStyle(color: Color(0xFF818CF8), fontSize: 12)),
+                ),
+              ],
+            ),
+            if (isLoadingRequests)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator(color: Color(0xFF818CF8))),
+              )
+            else if (myRequests.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1B4B).withOpacity(0.45),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Text(
+                  "لا توجد طلبات مسجلة حتى الآن.\nاضغط الزر أعلاه لتقديم إجازة أو إذن أو مأمورية.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              )
+            else
+              ...myRequests.map((r) {
+                final String st = (r['status'] ?? 'PENDING').toString();
+                final Color stColor = st == 'APPROVED'
+                    ? Colors.greenAccent
+                    : (st == 'REJECTED' ? Colors.redAccent : (st == 'PENDING' ? Colors.amberAccent : Colors.white54));
+                final String stLabel = st == 'APPROVED'
+                    ? '✅ مقبول'
+                    : (st == 'REJECTED' ? '❌ مرفوض' : (st == 'PENDING' ? '⏳ قيد المراجعة' : 'ملغي'));
+                final String period = r['request_category'] == 'PERMISSION'
+                    ? "${r['start_date']} • ${r['from_time'] ?? ''} - ${r['to_time'] ?? ''} (${r['duration_minutes'] ?? 0} د)"
+                    : "${r['start_date']}${r['end_date'] != null && r['end_date'] != r['start_date'] ? ' ← ${r['end_date']}' : ''} (${r['days_count'] ?? 1} يوم)";
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1B4B).withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFF3730A3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (r['subtype_label'] ?? '').toString(),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: stColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: stColor.withOpacity(0.6)),
+                            ),
+                            child: Text(stLabel, style: TextStyle(color: stColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(period, style: const TextStyle(color: Color(0xFFA5B4FC), fontSize: 12)),
+                      if (r['location_name'] != null && r['location_name'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text("📍 ${r['location_name']}", style: const TextStyle(color: Colors.tealAccent, fontSize: 12)),
+                      ],
+                      if (r['reason'] != null && r['reason'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(r['reason'].toString(), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ],
+                      if (r['admin_notes'] != null && r['admin_notes'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text("💬 الإدارة: ${r['admin_notes']}", style: const TextStyle(color: Colors.amberAccent, fontSize: 12)),
+                      ],
+                      if (st == 'PENDING') ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () => _cancelRequest(r['id'].toString()),
+                            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                            child: const Text("✖️ إلغاء الطلب", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
@@ -563,7 +1167,7 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
       children: [
         Container(
           constraints: const BoxConstraints(maxWidth: 400),
-          margin: const EdgeInsets.only(bottom: 16),
+          margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: const Color(0xFF1E1B4B).withOpacity(0.7),
@@ -587,6 +1191,22 @@ class _AttendanceHomeScreenState extends State<AttendanceHomeScreen> {
             ],
           ),
         ),
+        if (activeMissionLabel != null && activeMissionLabel!.isNotEmpty)
+          Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.teal.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.tealAccent.withOpacity(0.6)),
+            ),
+            child: Text(
+              "🚗 لديك مأمورية معتمدة اليوم: $activeMissionLabel",
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.tealAccent, fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
 
         Container(
           width: 230,

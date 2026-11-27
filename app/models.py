@@ -97,11 +97,17 @@ class Employee(Base):
     enrollment_token_hash = Column(String(128), nullable=True)
     enrollment_token_expires_at = Column(DateTime, nullable=True)
 
+    # Leave Balances (Egyptian Labor Law defaults: 21 Annual, 6 Casual, 15 Sick)
+    annual_leave_balance = Column(Float, default=21.0, nullable=False)
+    casual_leave_balance = Column(Float, default=6.0, nullable=False)
+    sick_leave_balance = Column(Float, default=15.0, nullable=False)
+
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utc_now)
 
     attendance_logs = relationship("AttendanceLog", back_populates="employee")
     challenges = relationship("LivenessChallenge", back_populates="employee")
+    hr_requests = relationship("HRRequest", back_populates="employee")
 
 
 class LivenessChallenge(Base):
@@ -176,3 +182,41 @@ class FraudAlert(Base):
     details = Column(JSON, nullable=False)
     client_ip = Column(String(45), nullable=True)
     created_at = Column(DateTime, default=utc_now, index=True)
+
+
+class HRRequest(Base):
+    """
+    Unified HR Requests table for Leaves (إجازات), Permissions (أذونات), and Missions (مأموريات).
+    """
+    __tablename__ = "hr_requests"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    employee_id = Column(String(36), ForeignKey("employees.id"), nullable=False, index=True)
+
+    # 'LEAVE' | 'PERMISSION' | 'MISSION'
+    request_category = Column(String(20), nullable=False, index=True)
+    # LEAVE: ANNUAL | CASUAL | SICK | UNPAID | OFFICIAL
+    # PERMISSION: LATE_ARRIVAL | EARLY_LEAVE | MID_DAY
+    # MISSION: EXTERNAL_MISSION | CLIENT_VISIT | REMOTE_WORK
+    request_subtype = Column(String(40), nullable=False)
+
+    start_date = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD (local company date)
+    end_date = Column(String(10), nullable=False, index=True)    # YYYY-MM-DD
+    days_count = Column(Float, default=1.0, nullable=False)
+
+    from_time = Column(String(5), nullable=True)        # HH:MM (for permissions / timed missions)
+    to_time = Column(String(5), nullable=True)          # HH:MM
+    duration_minutes = Column(Integer, nullable=True)   # Total minutes for permissions
+    location_name = Column(String(200), nullable=True)  # Destination for missions
+    reason = Column(Text, nullable=True)
+
+    # 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+    status = Column(String(20), default="PENDING", nullable=False, index=True)
+    admin_notes = Column(Text, nullable=True)
+    reviewed_by = Column(String(80), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    balance_deducted = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime, default=utc_now, index=True)
+
+    employee = relationship("Employee", back_populates="hr_requests")

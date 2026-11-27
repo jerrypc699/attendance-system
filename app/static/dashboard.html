@@ -99,6 +99,11 @@
                 <button onclick="switchTab('tab-employees')" id="btn-tab-employees"
                     class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">👥
                     الموظفين (<span id="count-emp-tab">0</span>)</button>
+                <button onclick="switchTab('tab-requests')" id="btn-tab-requests"
+                    class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                    <span>📅 الإجازات والأذونات</span>
+                    <span id="count-req-pending" class="hidden bg-amber-400 text-slate-950 font-black px-1.5 py-0.5 rounded-full text-[10px] leading-none">0</span>
+                </button>
                 <button onclick="switchTab('tab-branches')" id="btn-tab-branches"
                     class="tab-btn px-4 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition">🏢
                     الفروع والـ QR (<span id="count-branch-tab">0</span>)</button>
@@ -118,7 +123,7 @@
 
             <!-- TAB 1: OVERVIEW -->
             <section id="tab-overview" class="space-y-6">
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                         <p class="text-xs text-slate-500 font-semibold mb-1">الموظفين النشطين</p>
                         <h3 id="stat-emp-count" class="text-2xl font-black text-slate-800">--</h3>
@@ -130,6 +135,10 @@
                     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                         <p class="text-xs text-slate-500 font-semibold mb-1">بصمات معتمدة</p>
                         <h3 id="stat-approved-count" class="text-2xl font-black text-emerald-600">--</h3>
+                    </div>
+                    <div onclick="switchTab('tab-requests')" class="cursor-pointer hover:border-amber-400 transition bg-white p-4 rounded-2xl border border-amber-200 shadow-sm">
+                        <p class="text-xs text-amber-700 font-semibold mb-1">طلبات بانتظار المراجعة</p>
+                        <h3 id="stat-pending-req-count" class="text-2xl font-black text-amber-600">--</h3>
                     </div>
                     <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                         <p class="text-xs text-slate-500 font-semibold mb-1">محاولات تلاعب مرصودة</p>
@@ -206,12 +215,77 @@
                                     <th class="p-3.5">الاسم</th>
                                     <th class="p-3.5">البريد</th>
                                     <th class="p-3.5">القسم</th>
+                                    <th class="p-3.5">رصيد الإجازات</th>
                                     <th class="p-3.5">بصمة الوجه (AI)</th>
                                     <th class="p-3.5">الجهاز</th>
                                     <th class="p-3.5 text-center">إجراءات</th>
                                 </tr>
                             </thead>
                             <tbody id="employees-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2.5: HR REQUESTS (LEAVES, PERMISSIONS & MISSIONS) -->
+            <section id="tab-requests" class="hidden space-y-5">
+                <div
+                    class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">📅 إدارة الإجازات والأذونات والمأموريات</h2>
+                        <p class="text-xs text-slate-500">اعتماد الإجازة يخصم من الرصيد تلقائياً • إذن التأخير يعفي دقائق التأخير بالتقارير • المأمورية تسمح بالبصمة من موقع المأمورية مع فحص الوجه والموقع الحقيقي.</p>
+                    </div>
+                    <button onclick="openModal('modal-add-request')"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow whitespace-nowrap">+ تسجيل طلب لموظف</button>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">التصنيف</label>
+                        <select id="req-filter-category" onchange="loadRequestsFiltered()"
+                            class="text-xs p-2 rounded-xl border border-slate-300 bg-white min-w-[130px]">
+                            <option value="">كل التصنيفات</option>
+                            <option value="LEAVE">🏖️ إجازات</option>
+                            <option value="PERMISSION">⏰ أذونات</option>
+                            <option value="MISSION">🚗 مأموريات</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">الحالة</label>
+                        <select id="req-filter-status" onchange="loadRequestsFiltered()"
+                            class="text-xs p-2 rounded-xl border border-slate-300 bg-white min-w-[130px]">
+                            <option value="">كل الحالات</option>
+                            <option value="PENDING">⏳ قيد المراجعة</option>
+                            <option value="APPROVED">✅ مقبول</option>
+                            <option value="REJECTED">❌ مرفوض</option>
+                            <option value="CANCELLED">ملغي</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1">الموظف</label>
+                        <select id="req-filter-emp" onchange="loadRequestsFiltered()"
+                            class="text-xs p-2 rounded-xl border border-slate-300 bg-white min-w-[150px]">
+                            <option value="">كل الموظفين</option>
+                        </select>
+                    </div>
+                    <button onclick="loadRequestsFiltered()"
+                        class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl">🔄 تحديث</button>
+                </div>
+
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-500 border-b">
+                                <tr>
+                                    <th class="p-3.5">الموظف والرصيد</th>
+                                    <th class="p-3.5">نوع الطلب</th>
+                                    <th class="p-3.5">الفترة / التوقيت</th>
+                                    <th class="p-3.5">المكان / السبب</th>
+                                    <th class="p-3.5">الحالة</th>
+                                    <th class="p-3.5 text-center">إجراءات الإدارة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requests-table-body" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
                 </div>
@@ -475,6 +549,26 @@
                             class="w-full p-2.5 rounded-xl border border-slate-300">
                     </div>
                 </div>
+                <div id="emp-balances-group" class="hidden bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3 space-y-2">
+                    <div class="font-bold text-indigo-900 text-[11px]">📅 أرصدة الإجازات السنوية (أيام)</div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">اعتيادي</label>
+                            <input id="e-bal-annual" type="number" step="0.5" min="0" max="365" value="21"
+                                class="w-full p-2 rounded-xl border border-slate-300 bg-white text-center font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">عارضة</label>
+                            <input id="e-bal-casual" type="number" step="0.5" min="0" max="365" value="6"
+                                class="w-full p-2 rounded-xl border border-slate-300 bg-white text-center font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 mb-0.5">مرضي</label>
+                            <input id="e-bal-sick" type="number" step="0.5" min="0" max="365" value="15"
+                                class="w-full p-2 rounded-xl border border-slate-300 bg-white text-center font-bold">
+                        </div>
+                    </div>
+                </div>
                 <div id="emp-form-error" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-center"></div>
                 <div class="pt-2 flex gap-2">
                     <button id="emp-modal-submit" type="submit"
@@ -639,6 +733,105 @@
         </div>
     </div>
 
+    <!-- Modal: Add HR Request (Admin Direct Entry) -->
+    <div id="modal-add-request"
+        class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-black text-slate-900 text-sm">📅 تسجيل إجازة / إذن / مأمورية لموظف</h3>
+                <button onclick="closeModal('modal-add-request')"
+                    class="text-slate-400 text-xl font-bold">&times;</button>
+            </div>
+            <form onsubmit="submitAdminRequest(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">الموظف</label>
+                    <select id="req-emp-code" required class="w-full p-2.5 rounded-xl border border-slate-300 bg-white"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">التصنيف</label>
+                        <select id="req-category" onchange="syncAdminReqCategoryUI()" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white font-bold">
+                            <option value="LEAVE">🏖️ إجازة</option>
+                            <option value="PERMISSION">⏰ إذن</option>
+                            <option value="MISSION">🚗 مأمورية</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">نوع الطلب</label>
+                        <select id="req-subtype" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white"></select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label id="req-start-label" class="block font-bold text-slate-700 mb-1">من تاريخ</label>
+                        <input id="req-start-date" type="date" required class="w-full p-2.5 rounded-xl border border-slate-300">
+                    </div>
+                    <div id="req-end-date-wrap">
+                        <label class="block font-bold text-slate-700 mb-1">إلى تاريخ</label>
+                        <input id="req-end-date" type="date" class="w-full p-2.5 rounded-xl border border-slate-300">
+                    </div>
+                </div>
+                <div id="req-times-wrap" class="hidden grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">من الساعة</label>
+                        <input id="req-from-time" type="time" value="09:00" class="w-full p-2.5 rounded-xl border border-slate-300">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">إلى الساعة</label>
+                        <input id="req-to-time" type="time" value="10:30" class="w-full p-2.5 rounded-xl border border-slate-300">
+                    </div>
+                </div>
+                <div id="req-location-wrap" class="hidden">
+                    <label class="block font-bold text-slate-700 mb-1">مكان / جهة المأمورية</label>
+                    <input id="req-location" type="text" placeholder="مثال: مقر العميل بالتجمع الخامس / الشهر العقاري"
+                        class="w-full p-2.5 rounded-xl border border-slate-300">
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">السبب / التفاصيل</label>
+                    <textarea id="req-reason" rows="2" placeholder="تفاصيل اختيارية..."
+                        class="w-full p-2.5 rounded-xl border border-slate-300"></textarea>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">ملاحظات الإدارة (اختياري)</label>
+                    <input id="req-admin-notes" type="text" placeholder="ملاحظة تظهر في التقرير وللموظف"
+                        class="w-full p-2.5 rounded-xl border border-slate-300">
+                </div>
+                <label class="flex items-center gap-2 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl cursor-pointer">
+                    <input id="req-auto-approve" type="checkbox" checked class="w-4 h-4 accent-emerald-600">
+                    <span>اعتماد الطلب فوراً (وخصم رصيد الإجازة تلقائياً)</span>
+                </label>
+                <div id="req-form-error" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-bold text-center"></div>
+                <div class="pt-1 flex gap-2">
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl">💾 حفظ الطلب</button>
+                    <button type="button" onclick="closeModal('modal-add-request')" class="bg-slate-100 text-slate-700 font-bold px-4 rounded-xl">إلغاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Review HR Request (Approve / Reject with Note) -->
+    <div id="modal-review-request"
+        class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 id="review-modal-title" class="font-black text-slate-900 text-sm">مراجعة الطلب</h3>
+                <button onclick="closeModal('modal-review-request')" class="text-slate-400 text-xl font-bold">&times;</button>
+            </div>
+            <p id="review-modal-summary" class="text-xs text-slate-600 bg-slate-50 border border-slate-200 p-3 rounded-xl font-semibold"></p>
+            <div class="text-xs">
+                <label class="block font-bold text-slate-700 mb-1">ملاحظات الإدارة (اختياري — تظهر للموظف)</label>
+                <textarea id="review-admin-notes" rows="2" placeholder="مثال: بالتوفيق / يرجى تسليم المهام قبل الإجازة"
+                    class="w-full p-2.5 rounded-xl border border-slate-300"></textarea>
+            </div>
+            <div class="flex gap-2 text-xs">
+                <button id="review-confirm-btn" onclick="confirmReviewRequest()"
+                    class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl">تأكيد</button>
+                <button onclick="closeModal('modal-review-request')"
+                    class="bg-slate-100 text-slate-700 font-bold px-4 rounded-xl">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Change Password -->
     <div id="modal-change-password"
         class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -687,8 +880,30 @@
         let activeObjectUrl = null;
         let cachedBranches = [];
         let cachedEmployees = [];
+        let cachedRequests = [];
         let editingBranchId = null;
         let editingEmployeeId = null;
+        let pendingReviewTarget = null;
+
+        const HR_SUBTYPES = {
+            LEAVE: [
+                ['ANNUAL', '🏖️ إجازة اعتيادية (تُخصم من الرصيد)'],
+                ['CASUAL', '⚡ إجازة عارضة (تُخصم من الرصيد)'],
+                ['SICK', '🏥 إجازة مرضية'],
+                ['UNPAID', '📄 إجازة بدون أجر'],
+                ['OFFICIAL', '🎖️ إجازة رسمية / خاصة']
+            ],
+            PERMISSION: [
+                ['LATE_ARRIVAL', '🌅 إذن تأخير صباحي (يعفي التأخير بالتقرير)'],
+                ['EARLY_LEAVE', '🌇 إذن انصراف مبكر'],
+                ['MID_DAY', '⏱️ إذن خروج أثناء العمل']
+            ],
+            MISSION: [
+                ['EXTERNAL_MISSION', '🚗 مأمورية عمل خارجية (بصمة خارج المقر)'],
+                ['CLIENT_VISIT', '🤝 زيارة عميل / موقع'],
+                ['REMOTE_WORK', '💻 عمل عن بُعد']
+            ]
+        };
 
         function escapeHtml(str) {
             return String(str ?? '').replace(/[&<>"']/g, s => ({
@@ -769,7 +984,19 @@
                     document.getElementById('e-email').value = '';
                     document.getElementById('e-phone').value = '';
                     document.getElementById('e-dept').value = '';
+                    document.getElementById('emp-balances-group').classList.add('hidden');
                 }
+            }
+            if (id === 'modal-add-request') {
+                document.getElementById('req-form-error').classList.add('hidden');
+                const todayStr = new Date().toISOString().slice(0, 10);
+                document.getElementById('req-start-date').value = todayStr;
+                document.getElementById('req-end-date').value = todayStr;
+                document.getElementById('req-location').value = '';
+                document.getElementById('req-reason').value = '';
+                document.getElementById('req-admin-notes').value = '';
+                document.getElementById('req-auto-approve').checked = true;
+                syncAdminReqCategoryUI();
             }
         }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
@@ -856,14 +1083,15 @@
         }
 
         async function loadData() {
-            const [net, branches, employees, logs, frauds, devices, settings] = await Promise.all([
+            const [net, branches, employees, logs, frauds, devices, settings, hrReqData] = await Promise.all([
                 safeJson('/api/v1/admin/network-info', {}),
                 safeJson('/api/v1/admin/branches', []),
                 safeJson('/api/v1/admin/employees', []),
                 safeJson('/api/v1/admin/attendance-logs?limit=100', []),
                 safeJson('/api/v1/admin/fraud-alerts?limit=100', []),
                 safeJson('/api/v1/admin/devices', []),
-                safeJson('/api/v1/admin/settings', null)
+                safeJson('/api/v1/admin/settings', null),
+                safeJson('/api/v1/admin/requests?limit=150', { pending_count: 0, items: [] })
             ]);
 
             detectedPublicIp = net.detected_public_ip || '';
@@ -876,9 +1104,19 @@
             document.getElementById('stat-approved-count').innerText = logs.filter(l => l.status === 'APPROVED').length;
             document.getElementById('stat-fraud-count').innerText = frauds.length;
 
+            const pendingReqs = hrReqData.pending_count || 0;
+            document.getElementById('stat-pending-req-count').innerText = pendingReqs;
+            const pendingBadge = document.getElementById('count-req-pending');
+            if (pendingBadge) {
+                pendingBadge.innerText = pendingReqs;
+                pendingBadge.classList.toggle('hidden', pendingReqs === 0);
+            }
+
             cachedBranches = branches;
             cachedEmployees = employees;
+            cachedRequests = hrReqData.items || [];
             renderEmployees(employees);
+            renderRequests(cachedRequests);
             renderBranches(branches);
             renderDevices(devices);
             renderLogs(logs);
@@ -887,17 +1125,26 @@
         }
 
         function renderEmployees(list) {
-            const sel = document.getElementById('filter-emp-code');
-            if (sel) {
-                const cur = sel.value;
-                sel.innerHTML = '<option value="">كل الموظفين</option>' + list.map(e =>
-                    `<option value="${escapeHtml(e.employee_code)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_code)})</option>`
-                ).join('');
-                sel.value = cur;
+            const empOpts = list.map(e =>
+                `<option value="${escapeHtml(e.employee_code)}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_code)})</option>`
+            ).join('');
+            ['filter-emp-code', 'req-filter-emp'].forEach(id => {
+                const sel = document.getElementById(id);
+                if (sel) {
+                    const cur = sel.value;
+                    sel.innerHTML = '<option value="">كل الموظفين</option>' + empOpts;
+                    sel.value = cur;
+                }
+            });
+            const reqEmpSel = document.getElementById('req-emp-code');
+            if (reqEmpSel) {
+                const cur = reqEmpSel.value;
+                reqEmpSel.innerHTML = empOpts || '<option value="">لا يوجد موظفين</option>';
+                if (cur) reqEmpSel.value = cur;
             }
             const tbody = document.getElementById('employees-table-body');
             if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400">لا يوجد موظفين مسجلين حالياً</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-slate-400">لا يوجد موظفين مسجلين حالياً</td></tr>';
                 return;
             }
             tbody.innerHTML = list.map(e => `
@@ -906,6 +1153,13 @@
                     <td class="p-3.5 font-bold text-slate-900">${escapeHtml(e.full_name)}</td>
                     <td class="p-3.5 text-slate-500">${escapeHtml(e.email)}</td>
                     <td class="p-3.5 text-slate-600">${escapeHtml(e.department || 'العام')}</td>
+                    <td class="p-3.5">
+                        <div class="flex flex-wrap gap-1 text-[10px] font-bold">
+                            <span class="bg-sky-50 text-sky-800 border border-sky-200 px-1.5 py-0.5 rounded-md">اعتيادي: ${e.annual_leave_balance ?? 21}</span>
+                            <span class="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-md">عارضة: ${e.casual_leave_balance ?? 6}</span>
+                            <span class="bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded-md">مرضي: ${e.sick_leave_balance ?? 15}</span>
+                        </div>
+                    </td>
                     <td class="p-3.5">
                         ${e.is_face_enrolled
                     ? `<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold text-[10px]">مسجلة ✅ (${escapeHtml(e.face_model_version || 'AI')})</span>`
@@ -920,6 +1174,171 @@
                     </td>
                 </tr>
             `).join('');
+        }
+
+        function renderRequests(list) {
+            const tbody = document.getElementById('requests-table-body');
+            if (!tbody) return;
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">لا توجد طلبات إجازات أو أذونات أو مأموريات مطابقة للتصفية</td></tr>';
+                return;
+            }
+            const catStyle = {
+                LEAVE: 'bg-sky-100 text-sky-800 border-sky-200',
+                PERMISSION: 'bg-purple-100 text-purple-800 border-purple-200',
+                MISSION: 'bg-teal-100 text-teal-800 border-teal-200'
+            };
+            const stBadge = {
+                PENDING: '<span class="bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-bold text-[10px]">⏳ قيد المراجعة</span>',
+                APPROVED: '<span class="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold text-[10px]">✅ مقبول</span>',
+                REJECTED: '<span class="bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full font-bold text-[10px]">❌ مرفوض</span>',
+                CANCELLED: '<span class="bg-slate-200 text-slate-600 px-2.5 py-0.5 rounded-full font-bold text-[10px]">ملغي</span>'
+            };
+            tbody.innerHTML = list.map(r => {
+                const durText = r.request_category === 'PERMISSION'
+                    ? `${escapeHtml(r.start_date)} • ${escapeHtml(r.from_time || '')} ← ${escapeHtml(r.to_time || '')} (${r.duration_minutes || 0} د)`
+                    : `${escapeHtml(r.start_date)}${r.end_date && r.end_date !== r.start_date ? ' ← ' + escapeHtml(r.end_date) : ''} (${r.days_count || 1} يوم)`;
+                return `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-3.5">
+                        <div class="font-bold text-slate-900">${escapeHtml(r.employee_name)} <span class="font-mono text-[10px] text-indigo-600">(${escapeHtml(r.employee_code)})</span></div>
+                        <div class="text-[10px] text-slate-500 mt-0.5">اعتيادي: <b>${r.employee_annual_balance}</b> • عارضة: <b>${r.employee_casual_balance}</b> • مرضي: <b>${r.employee_sick_balance}</b></div>
+                    </td>
+                    <td class="p-3.5">
+                        <span class="px-2 py-0.5 rounded-lg border font-bold text-[10px] ${catStyle[r.request_category] || 'bg-slate-100 text-slate-700'}">${escapeHtml(r.category_label)}</span>
+                        <div class="font-bold text-slate-800 mt-1">${escapeHtml(r.subtype_label)}</div>
+                    </td>
+                    <td class="p-3.5 font-mono text-[11px] text-slate-700 font-semibold">${durText}</td>
+                    <td class="p-3.5 max-w-[230px]">
+                        ${r.location_name ? `<div class="font-bold text-teal-800 text-[11px]">📍 ${escapeHtml(r.location_name)}</div>` : ''}
+                        <div class="text-slate-600 text-[11px]">${escapeHtml(r.reason || '--')}</div>
+                        ${r.admin_notes ? `<div class="text-[10px] text-indigo-700 font-bold mt-0.5">💬 الإدارة: ${escapeHtml(r.admin_notes)}</div>` : ''}
+                    </td>
+                    <td class="p-3.5">
+                        ${stBadge[r.status] || escapeHtml(r.status)}
+                        ${r.reviewed_by ? `<div class="text-[10px] text-slate-400 mt-0.5">بواسطة: ${escapeHtml(r.reviewed_by)}</div>` : ''}
+                    </td>
+                    <td class="p-3.5 text-center">
+                        <div class="flex flex-wrap items-center justify-center gap-1.5">
+                            ${r.status === 'PENDING' ? `
+                                <button onclick="openReviewModal('${escapeHtml(r.id)}', 'APPROVED')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg font-bold text-[10px]">✅ موافقة</button>
+                                <button onclick="openReviewModal('${escapeHtml(r.id)}', 'REJECTED')" class="bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg font-bold text-[10px]">❌ رفض</button>
+                            ` : ''}
+                            <button onclick="deleteHrRequest('${escapeHtml(r.id)}')" class="bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 px-2 py-1 rounded-lg font-bold text-[10px]" title="حذف الطلب واسترجاع الرصيد">🗑️</button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function syncAdminReqCategoryUI() {
+            const cat = document.getElementById('req-category').value;
+            const subSel = document.getElementById('req-subtype');
+            subSel.innerHTML = (HR_SUBTYPES[cat] || []).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+            document.getElementById('req-start-label').innerText = cat === 'PERMISSION' ? 'التاريخ' : 'من تاريخ';
+            document.getElementById('req-end-date-wrap').classList.toggle('hidden', cat === 'PERMISSION');
+            document.getElementById('req-times-wrap').classList.toggle('hidden', cat !== 'PERMISSION');
+            document.getElementById('req-location-wrap').classList.toggle('hidden', cat !== 'MISSION');
+        }
+
+        async function loadRequestsFiltered() {
+            const cat = document.getElementById('req-filter-category').value;
+            const st = document.getElementById('req-filter-status').value;
+            const emp = document.getElementById('req-filter-emp').value;
+            const qs = new URLSearchParams({ limit: '200' });
+            if (cat) qs.set('category', cat);
+            if (st) qs.set('status_filter', st);
+            if (emp) qs.set('employee_code', emp);
+            const data = await safeJson('/api/v1/admin/requests?' + qs.toString(), { pending_count: 0, items: [] });
+            cachedRequests = data.items || [];
+            document.getElementById('stat-pending-req-count').innerText = data.pending_count || 0;
+            const pendingBadge = document.getElementById('count-req-pending');
+            if (pendingBadge) {
+                pendingBadge.innerText = data.pending_count || 0;
+                pendingBadge.classList.toggle('hidden', !(data.pending_count > 0));
+            }
+            renderRequests(cachedRequests);
+        }
+
+        async function submitAdminRequest(e) {
+            e.preventDefault();
+            const errEl = document.getElementById('req-form-error');
+            errEl.classList.add('hidden');
+            const cat = document.getElementById('req-category').value;
+            const payload = {
+                employee_code: document.getElementById('req-emp-code').value,
+                request_category: cat,
+                request_subtype: document.getElementById('req-subtype').value,
+                start_date: document.getElementById('req-start-date').value,
+                end_date: cat === 'PERMISSION' ? document.getElementById('req-start-date').value : (document.getElementById('req-end-date').value || document.getElementById('req-start-date').value),
+                from_time: cat === 'PERMISSION' ? document.getElementById('req-from-time').value : null,
+                to_time: cat === 'PERMISSION' ? document.getElementById('req-to-time').value : null,
+                location_name: cat === 'MISSION' ? (document.getElementById('req-location').value.trim() || null) : null,
+                reason: document.getElementById('req-reason').value.trim() || null,
+                admin_notes: document.getElementById('req-admin-notes').value.trim() || null,
+                auto_approve: document.getElementById('req-auto-approve').checked
+            };
+            const res = await apiFetch('/api/v1/admin/requests', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                closeModal('modal-add-request');
+                showToast('✅ تم تسجيل الطلب بنجاح');
+                loadData();
+            } else {
+                errEl.innerText = data.detail || 'تعذر تسجيل الطلب';
+                errEl.classList.remove('hidden');
+                showToast(data.detail || 'تعذر تسجيل الطلب', true);
+            }
+        }
+
+        function openReviewModal(reqId, decision) {
+            const req = cachedRequests.find(x => x.id === reqId);
+            if (!req) return;
+            pendingReviewTarget = { id: reqId, decision };
+            const isApprove = decision === 'APPROVED';
+            document.getElementById('review-modal-title').innerText = isApprove ? '✅ تأكيد اعتماد الطلب' : '❌ تأكيد رفض الطلب';
+            document.getElementById('review-modal-summary').innerText = `${req.employee_name} (${req.employee_code}) — ${req.subtype_label} (${req.start_date}${req.end_date && req.end_date !== req.start_date ? ' إلى ' + req.end_date : ''})`;
+            document.getElementById('review-admin-notes').value = '';
+            const btn = document.getElementById('review-confirm-btn');
+            btn.innerText = isApprove ? '✅ تأكيد الموافقة' : '❌ تأكيد الرفض';
+            btn.className = `flex-1 ${isApprove ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'} text-white font-bold py-2.5 rounded-xl`;
+            openModal('modal-review-request');
+        }
+
+        async function confirmReviewRequest() {
+            if (!pendingReviewTarget) return;
+            const { id, decision } = pendingReviewTarget;
+            const notes = document.getElementById('review-admin-notes').value.trim() || null;
+            const res = await apiFetch(`/api/v1/admin/requests/${encodeURIComponent(id)}/review`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision, admin_notes: notes })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                closeModal('modal-review-request');
+                pendingReviewTarget = null;
+                showToast(data.message || 'تم تحديث حالة الطلب');
+                loadData();
+            } else {
+                showToast(data.detail || 'فشل تحديث حالة الطلب', true);
+            }
+        }
+
+        async function deleteHrRequest(reqId) {
+            if (!confirm('حذف هذا الطلب نهائياً؟ (سيتم استرجاع رصيد الإجازة تلقائياً إن كان قد خُصم)')) return;
+            const res = await apiFetch(`/api/v1/admin/requests/${encodeURIComponent(reqId)}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message || 'تم حذف الطلب');
+                loadData();
+            } else {
+                showToast(data.detail || 'تعذر حذف الطلب', true);
+            }
         }
 
         function renderBranches(list) {
@@ -1081,6 +1500,10 @@
             document.getElementById('e-email').value = emp.email || '';
             document.getElementById('e-phone').value = emp.phone || '';
             document.getElementById('e-dept').value = emp.department || '';
+            document.getElementById('e-bal-annual').value = emp.annual_leave_balance ?? 21;
+            document.getElementById('e-bal-casual').value = emp.casual_leave_balance ?? 6;
+            document.getElementById('e-bal-sick').value = emp.sick_leave_balance ?? 15;
+            document.getElementById('emp-balances-group').classList.remove('hidden');
             openModal('modal-add-employee', true);
         }
 
@@ -1089,16 +1512,22 @@
             const isEdit = Boolean(editingEmployeeId);
             const url = isEdit ? `/api/v1/admin/employees/${encodeURIComponent(editingEmployeeId)}` : '/api/v1/admin/employees';
             const method = isEdit ? 'PATCH' : 'POST';
+            const payload = {
+                employee_code: document.getElementById('e-code').value.trim(),
+                full_name: document.getElementById('e-name').value.trim(),
+                email: document.getElementById('e-email').value.trim(),
+                phone: document.getElementById('e-phone').value.trim() || null,
+                department: document.getElementById('e-dept').value.trim() || 'العام'
+            };
+            if (isEdit) {
+                payload.annual_leave_balance = parseFloat(document.getElementById('e-bal-annual').value);
+                payload.casual_leave_balance = parseFloat(document.getElementById('e-bal-casual').value);
+                payload.sick_leave_balance = parseFloat(document.getElementById('e-bal-sick').value);
+            }
             const res = await apiFetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    employee_code: document.getElementById('e-code').value.trim(),
-                    full_name: document.getElementById('e-name').value.trim(),
-                    email: document.getElementById('e-email').value.trim(),
-                    phone: document.getElementById('e-phone').value.trim() || null,
-                    department: document.getElementById('e-dept').value.trim() || 'العام'
-                })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (res.ok) {
@@ -1409,7 +1838,7 @@
             a.download = `WalaaHR_Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`;
             a.click();
             URL.revokeObjectURL(url);
-            showToast('✅ تم تحميل تقرير Excel (3 شيتات مجمّعة) بنجاح!');
+            showToast('✅ تم تحميل تقرير Excel (4 شيتات شاملة الإجازات والأذونات والمأموريات) بنجاح!');
         }
 
         async function openProtectedPhoto(snapshotPath, name, timeStr) {

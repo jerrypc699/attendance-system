@@ -174,6 +174,28 @@
                 </div>
             </div>
 
+            <!-- Active Approved Mission Banner -->
+            <div id="active-mission-banner"
+                class="hidden w-full bg-teal-950/70 border border-teal-600/60 rounded-2xl px-3.5 py-2.5 text-center text-[11px] font-bold text-teal-200">
+                🚗 لديك مأمورية معتمدة اليوم (<span id="active-mission-text" class="text-white"></span>) — مسموح بالبصمة من موقع المأمورية
+            </div>
+
+            <!-- 2-Tab Mode Switcher (Shown when face is enrolled) -->
+            <div id="mobile-mode-tabs"
+                class="hidden w-full grid grid-cols-2 gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-2xl">
+                <button type="button" id="btn-mode-punch" onclick="switchMobileTab('punch')"
+                    class="py-2 rounded-xl text-xs font-extrabold bg-indigo-600 text-white shadow transition">
+                    📸 البصمة
+                </button>
+                <button type="button" id="btn-mode-requests" onclick="switchMobileTab('requests')"
+                    class="py-2 rounded-xl text-xs font-extrabold text-slate-400 hover:text-white transition">
+                    📅 الإجازات والأذونات
+                </button>
+            </div>
+
+            <!-- MODE 1: PUNCH VIEW -->
+            <div id="mobile-punch-view" class="w-full space-y-4">
+
             <!-- Camera Viewport -->
             <div class="flex justify-center">
                 <div
@@ -249,6 +271,107 @@
                     <span>🔴</span><span>تسجيل انصراف</span>
                 </button>
             </div>
+            </div><!-- /mobile-punch-view -->
+
+            <!-- MODE 2: LEAVES, PERMISSIONS & MISSIONS VIEW -->
+            <div id="mobile-requests-view" class="hidden w-full space-y-4">
+                <!-- Leave Balance Cards -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-sky-950/50 border border-sky-800/60 rounded-2xl p-3 text-center">
+                        <div class="text-[10px] text-sky-300 font-bold">اعتيادي</div>
+                        <div id="mob-bal-annual" class="text-xl font-black text-white mt-0.5">--</div>
+                        <div class="text-[9px] text-slate-400">يوم متبقي</div>
+                    </div>
+                    <div class="bg-amber-950/50 border border-amber-800/60 rounded-2xl p-3 text-center">
+                        <div class="text-[10px] text-amber-300 font-bold">عارضة</div>
+                        <div id="mob-bal-casual" class="text-xl font-black text-white mt-0.5">--</div>
+                        <div class="text-[9px] text-slate-400">يوم متبقي</div>
+                    </div>
+                    <div class="bg-emerald-950/50 border border-emerald-800/60 rounded-2xl p-3 text-center">
+                        <div class="text-[10px] text-emerald-300 font-bold">مرضي</div>
+                        <div id="mob-bal-sick" class="text-xl font-black text-white mt-0.5">--</div>
+                        <div class="text-[9px] text-slate-400">يوم متبقي</div>
+                    </div>
+                </div>
+
+                <!-- New Request Form -->
+                <form id="mob-req-form" onsubmit="submitMobileRequest(event)"
+                    class="bg-slate-900/95 border border-slate-800 rounded-3xl p-4 space-y-3 text-xs">
+                    <h4 class="font-black text-white text-sm">📝 تقديم طلب جديد</h4>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button type="button" id="mob-cat-LEAVE" onclick="selectMobReqCategory('LEAVE')"
+                            class="py-2 rounded-xl font-bold text-[11px] bg-indigo-600 text-white border border-indigo-500">🏖️ إجازة</button>
+                        <button type="button" id="mob-cat-PERMISSION" onclick="selectMobReqCategory('PERMISSION')"
+                            class="py-2 rounded-xl font-bold text-[11px] bg-slate-950 text-slate-300 border border-slate-700">⏰ إذن</button>
+                        <button type="button" id="mob-cat-MISSION" onclick="selectMobReqCategory('MISSION')"
+                            class="py-2 rounded-xl font-bold text-[11px] bg-slate-950 text-slate-300 border border-slate-700">🚗 مأمورية</button>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] text-slate-400 font-bold mb-1">نوع الطلب</label>
+                        <select id="mob-req-subtype"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-xs font-bold"></select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label id="mob-req-start-lbl" class="block text-[11px] text-slate-400 font-bold mb-1">من تاريخ</label>
+                            <input id="mob-req-start" type="date" required
+                                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-white text-xs">
+                        </div>
+                        <div id="mob-req-end-wrap">
+                            <label class="block text-[11px] text-slate-400 font-bold mb-1">إلى تاريخ</label>
+                            <input id="mob-req-end" type="date"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-white text-xs">
+                        </div>
+                    </div>
+
+                    <div id="mob-req-times-wrap" class="hidden grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] text-slate-400 font-bold mb-1">من الساعة</label>
+                            <input id="mob-req-from" type="time" value="09:00"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-white text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 font-bold mb-1">إلى الساعة</label>
+                            <input id="mob-req-to" type="time" value="10:30"
+                                class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-white text-xs">
+                        </div>
+                    </div>
+
+                    <div id="mob-req-loc-wrap" class="hidden">
+                        <label class="block text-[11px] text-slate-400 font-bold mb-1">مكان / جهة المأمورية</label>
+                        <input id="mob-req-location" type="text" placeholder="مثال: مقر العميل / بنك / هيئة حكومية"
+                            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs">
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] text-slate-400 font-bold mb-1">السبب / التفاصيل (اختياري)</label>
+                        <textarea id="mob-req-reason" rows="2" placeholder="اكتب سبب الطلب بإيجاز..."
+                            class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs"></textarea>
+                    </div>
+
+                    <div id="mob-req-error"
+                        class="hidden p-2.5 rounded-xl bg-rose-950/80 border border-rose-700 text-rose-200 text-[11px] font-bold text-center"></div>
+
+                    <button type="submit" id="btn-mob-req-submit"
+                        class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black py-3 rounded-2xl text-xs shadow-lg active:scale-95 transition">
+                        📤 إرسال الطلب للإدارة
+                    </button>
+                </form>
+
+                <!-- Previous Requests History -->
+                <div class="bg-slate-900/95 border border-slate-800 rounded-3xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-black text-white text-xs">📋 سجل طلباتي</h4>
+                        <button type="button" onclick="loadMyRequests()"
+                            class="text-[11px] text-indigo-400 font-bold hover:underline">🔄 تحديث</button>
+                    </div>
+                    <div id="mob-requests-list" class="space-y-2.5 text-xs">
+                        <div class="text-center text-slate-500 py-4">جارٍ التحميل...</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -300,7 +423,7 @@
 
         // Register Service Worker for installable PWA
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => { });
+            navigator.serviceWorker.register('/sw.js?v=5').catch(() => { });
         }
 
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -545,11 +668,21 @@
             const enrollBox = document.getElementById('enroll-container');
             const punchBox = document.getElementById('punch-buttons-container');
             const qrSec = document.getElementById('qr-section');
+            const modeTabs = document.getElementById('mobile-mode-tabs');
+            const missionBanner = document.getElementById('active-mission-banner');
+
+            if (data.active_mission_today && data.active_mission_today.location) {
+                document.getElementById('active-mission-text').innerText = data.active_mission_today.location;
+                missionBanner.classList.remove('hidden');
+            } else {
+                missionBanner.classList.add('hidden');
+            }
 
             if (data.is_face_enrolled) {
                 badge.innerHTML = '<span class="text-emerald-400">🟢 مسجلة (AI)</span>';
                 enrollBox.classList.add('hidden');
                 punchBox.classList.remove('hidden');
+                modeTabs.classList.remove('hidden');
                 if (appConfig.qr_enabled) {
                     qrSec.classList.remove('hidden');
                     document.getElementById('qr-req-label').innerText = appConfig.qr_required ? '(إجباري)' : '(للمدخل عند اللزوم)';
@@ -563,6 +696,7 @@
                 enrollBox.classList.remove('hidden');
                 punchBox.classList.add('hidden');
                 qrSec.classList.add('hidden');
+                modeTabs.classList.add('hidden');
                 document.getElementById('challenge-text').innerText = 'أدخل كود التفعيل من الإدارة والتقط صورة لوجهك';
             }
 
@@ -571,7 +705,204 @@
 
             document.getElementById('step-lookup').classList.add('hidden');
             document.getElementById('step-punch-ready').classList.remove('hidden');
-            startCamera();
+            switchMobileTab('punch');
+        }
+
+        const MOB_HR_SUBTYPES = {
+            LEAVE: [
+                ['ANNUAL', '🏖️ إجازة اعتيادية'],
+                ['CASUAL', '⚡ إجازة عارضة'],
+                ['SICK', '🏥 إجازة مرضية'],
+                ['UNPAID', '📄 إجازة بدون أجر'],
+                ['OFFICIAL', '🎖️ إجازة رسمية / خاصة']
+            ],
+            PERMISSION: [
+                ['LATE_ARRIVAL', '🌅 إذن تأخير صباحي'],
+                ['EARLY_LEAVE', '🌇 إذن انصراف مبكر'],
+                ['MID_DAY', '⏱️ إذن خروج أثناء العمل']
+            ],
+            MISSION: [
+                ['EXTERNAL_MISSION', '🚗 مأمورية عمل خارجية'],
+                ['CLIENT_VISIT', '🤝 زيارة عميل / موقع'],
+                ['REMOTE_WORK', '💻 عمل عن بُعد']
+            ]
+        };
+        let mobReqCategory = 'LEAVE';
+
+        function switchMobileTab(mode) {
+            const punchView = document.getElementById('mobile-punch-view');
+            const reqView = document.getElementById('mobile-requests-view');
+            const btnP = document.getElementById('btn-mode-punch');
+            const btnR = document.getElementById('btn-mode-requests');
+
+            if (mode === 'requests') {
+                punchView.classList.add('hidden');
+                reqView.classList.remove('hidden');
+                btnP.className = 'py-2 rounded-xl text-xs font-extrabold text-slate-400 hover:text-white transition';
+                btnR.className = 'py-2 rounded-xl text-xs font-extrabold bg-indigo-600 text-white shadow transition';
+                stopCamera();
+                const todayStr = new Date().toISOString().slice(0, 10);
+                if (!document.getElementById('mob-req-start').value) document.getElementById('mob-req-start').value = todayStr;
+                if (!document.getElementById('mob-req-end').value) document.getElementById('mob-req-end').value = todayStr;
+                selectMobReqCategory(mobReqCategory);
+                loadMyRequests();
+            } else {
+                reqView.classList.add('hidden');
+                punchView.classList.remove('hidden');
+                btnP.className = 'py-2 rounded-xl text-xs font-extrabold bg-indigo-600 text-white shadow transition';
+                btnR.className = 'py-2 rounded-xl text-xs font-extrabold text-slate-400 hover:text-white transition';
+                startCamera();
+            }
+        }
+
+        function selectMobReqCategory(cat) {
+            mobReqCategory = cat;
+            ['LEAVE', 'PERMISSION', 'MISSION'].forEach(c => {
+                const b = document.getElementById('mob-cat-' + c);
+                if (b) {
+                    b.className = c === cat
+                        ? 'py-2 rounded-xl font-bold text-[11px] bg-indigo-600 text-white border border-indigo-500'
+                        : 'py-2 rounded-xl font-bold text-[11px] bg-slate-950 text-slate-300 border border-slate-700';
+                }
+            });
+            const sel = document.getElementById('mob-req-subtype');
+            sel.innerHTML = (MOB_HR_SUBTYPES[cat] || []).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+            document.getElementById('mob-req-start-lbl').innerText = cat === 'PERMISSION' ? 'التاريخ' : 'من تاريخ';
+            document.getElementById('mob-req-end-wrap').classList.toggle('hidden', cat === 'PERMISSION');
+            document.getElementById('mob-req-times-wrap').classList.toggle('hidden', cat !== 'PERMISSION');
+            document.getElementById('mob-req-loc-wrap').classList.toggle('hidden', cat !== 'MISSION');
+            document.getElementById('mob-req-error').classList.add('hidden');
+        }
+
+        async function loadMyRequests() {
+            if (!currentEmployee) return;
+            const listEl = document.getElementById('mob-requests-list');
+            const fp = getOrCreateDeviceFingerprint();
+            const tok = getDeviceToken(currentEmployee.employee_code) || getAnySavedDeviceToken();
+            if (!tok) {
+                listEl.innerHTML = '<div class="text-center text-amber-300 py-4">يرجى استخدام هاتفك المربوط لعرض وتقديم الطلبات.</div>';
+                return;
+            }
+            listEl.innerHTML = '<div class="text-center text-slate-400 py-4">⏳ جارٍ تحميل رصيدك وطلباتك...</div>';
+            try {
+                const res = await fetch('/api/v1/requests/my-summary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_fingerprint: fp, device_token: tok })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    listEl.innerHTML = `<div class="text-center text-rose-400 py-4">${escapeHtml(data.detail || 'تعذر تحميل الطلبات')}</div>`;
+                    return;
+                }
+                document.getElementById('mob-bal-annual').innerText = data.balances?.annual ?? '--';
+                document.getElementById('mob-bal-casual').innerText = data.balances?.casual ?? '--';
+                document.getElementById('mob-bal-sick').innerText = data.balances?.sick ?? '--';
+
+                const reqs = data.requests || [];
+                if (!reqs.length) {
+                    listEl.innerHTML = '<div class="text-center text-slate-500 py-5">لا توجد طلبات مسجلة حتى الآن</div>';
+                    return;
+                }
+                const stMap = {
+                    PENDING: ['⏳ قيد المراجعة', 'bg-amber-950/80 text-amber-300 border-amber-700/60'],
+                    APPROVED: ['✅ مقبول', 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'],
+                    REJECTED: ['❌ مرفوض', 'bg-rose-950/80 text-rose-300 border-rose-700/60'],
+                    CANCELLED: ['ملغي', 'bg-slate-800 text-slate-400 border-slate-700']
+                };
+                listEl.innerHTML = reqs.map(r => {
+                    const [stLbl, stCls] = stMap[r.status] || [r.status, 'bg-slate-800 text-slate-300 border-slate-700'];
+                    const period = r.request_category === 'PERMISSION'
+                        ? `${escapeHtml(r.start_date)} • ${escapeHtml(r.from_time || '')} - ${escapeHtml(r.to_time || '')} (${r.duration_minutes || 0} د)`
+                        : `${escapeHtml(r.start_date)}${r.end_date && r.end_date !== r.start_date ? ' ← ' + escapeHtml(r.end_date) : ''} (${r.days_count || 1} يوم)`;
+                    return `
+                    <div class="bg-slate-950/75 border border-slate-800 rounded-2xl p-3 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="font-extrabold text-white">${escapeHtml(r.subtype_label)}</span>
+                            <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ${stCls}">${stLbl}</span>
+                        </div>
+                        <div class="text-[11px] text-indigo-300 font-mono">${period}</div>
+                        ${r.location_name ? `<div class="text-[11px] text-teal-300 font-bold">📍 ${escapeHtml(r.location_name)}</div>` : ''}
+                        ${r.reason ? `<div class="text-[11px] text-slate-400">${escapeHtml(r.reason)}</div>` : ''}
+                        ${r.admin_notes ? `<div class="text-[11px] text-amber-200 bg-amber-950/40 border border-amber-800/40 rounded-lg px-2 py-1">💬 الإدارة: ${escapeHtml(r.admin_notes)}</div>` : ''}
+                        ${r.status === 'PENDING' ? `
+                            <div class="pt-1">
+                                <button type="button" onclick="cancelMobileRequest('${escapeHtml(r.id)}')"
+                                    class="text-[10px] text-rose-300 hover:text-white bg-rose-950/70 border border-rose-800 px-3 py-1 rounded-lg font-bold">
+                                    ✖️ إلغاء الطلب
+                                </button>
+                            </div>` : ''}
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                listEl.innerHTML = '<div class="text-center text-rose-400 py-4">تعذر الاتصال بالسيرفر</div>';
+            }
+        }
+
+        async function submitMobileRequest(e) {
+            e.preventDefault();
+            if (!currentEmployee) return;
+            const errBox = document.getElementById('mob-req-error');
+            errBox.classList.add('hidden');
+            const btn = document.getElementById('btn-mob-req-submit');
+            const fp = getOrCreateDeviceFingerprint();
+            const tok = getDeviceToken(currentEmployee.employee_code) || getAnySavedDeviceToken();
+            if (!tok) {
+                errBox.innerText = 'هذا الهاتف غير موثق بعد.';
+                errBox.classList.remove('hidden');
+                return;
+            }
+            const startVal = document.getElementById('mob-req-start').value;
+            const endVal = document.getElementById('mob-req-end').value || startVal;
+            const payload = {
+                device_fingerprint: fp,
+                device_token: tok,
+                request_category: mobReqCategory,
+                request_subtype: document.getElementById('mob-req-subtype').value,
+                start_date: startVal,
+                end_date: mobReqCategory === 'PERMISSION' ? startVal : endVal,
+                from_time: mobReqCategory === 'PERMISSION' ? document.getElementById('mob-req-from').value : null,
+                to_time: mobReqCategory === 'PERMISSION' ? document.getElementById('mob-req-to').value : null,
+                location_name: mobReqCategory === 'MISSION' ? (document.getElementById('mob-req-location').value.trim() || null) : null,
+                reason: document.getElementById('mob-req-reason').value.trim() || null
+            };
+            btn.disabled = true;
+            btn.innerText = '⏳ جارٍ إرسال الطلب...';
+            try {
+                const res = await fetch('/api/v1/requests/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    document.getElementById('mob-req-location').value = '';
+                    document.getElementById('mob-req-reason').value = '';
+                    showResult(true, '✅ تم إرسال الطلب', `<p>${escapeHtml(data.message)}</p>`);
+                    loadMyRequests();
+                } else {
+                    errBox.innerText = data.detail || 'تعذر إرسال الطلب';
+                    errBox.classList.remove('hidden');
+                }
+            } catch (err) {
+                errBox.innerText = 'تعذر الاتصال بالسيرفر';
+                errBox.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '📤 إرسال الطلب للإدارة';
+            }
+        }
+
+        async function cancelMobileRequest(reqId) {
+            if (!confirm('إلغاء هذا الطلب؟')) return;
+            const fp = getOrCreateDeviceFingerprint();
+            const tok = getDeviceToken(currentEmployee.employee_code) || getAnySavedDeviceToken();
+            const res = await fetch(`/api/v1/requests/${encodeURIComponent(reqId)}/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device_fingerprint: fp, device_token: tok })
+            });
+            if (res.ok) loadMyRequests();
         }
 
         function resetEmployeeLookup() {
@@ -755,10 +1086,14 @@
                 if (pData.success) {
                     currentEmployee.last_punch_today = type;
                     const simPct = ((pData.telemetry_details?.face_similarity || 0) * 100).toFixed(1);
+                    const missionInfo = pData.telemetry_details?.approved_mission
+                        ? `<p class="text-teal-300 font-bold"><strong>🚗 المأمورية:</strong> ${escapeHtml(pData.telemetry_details.approved_mission)}</p>`
+                        : '';
                     showResult(true, `✅ تم اعتماد ${type === 'CHECK_IN' ? 'الحضور' : 'الانصراف'}!`, `
                         <p><strong>الموظف:</strong> ${escapeHtml(pData.employee_name)}</p>
                         <p><strong>الفرع:</strong> ${escapeHtml(pData.telemetry_details?.branch || '--')}</p>
-                        <p><strong>المسافة:</strong> ${escapeHtml(pData.telemetry_details?.distance_meters)} متر</p>
+                        ${missionInfo}
+                        <p><strong>المسافة:</strong> ${escapeHtml(pData.telemetry_details?.distance_meters ?? '--')} متر</p>
                         <p><strong>تطابق الوجه (AI):</strong> ${escapeHtml(simPct)}%</p>
                         <p><strong>التوقيت الرسمي:</strong> ${escapeHtml(formatLocalTime(pData.server_timestamp))}</p>
                     `, validFrames[validFrames.length - 1]);

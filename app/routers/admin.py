@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
-from app.models import AdminUser, AttendanceLog, Branch, Device, Employee, FraudAlert
+from app.models import AdminUser, AttendanceLog, Branch, Device, Employee, FraudAlert, HRRequest
 from app.reports.excel_report import build_attendance_excel_workbook
 from app.schemas import (
     BranchCreate,
@@ -360,6 +360,9 @@ def list_employees(include_inactive: bool = False, db: Session = Depends(get_db)
             "is_face_enrolled": e.is_face_enrolled,
             "face_model_version": e.face_model_version,
             "is_active": e.is_active,
+            "annual_leave_balance": round(float(e.annual_leave_balance if e.annual_leave_balance is not None else 21.0), 1),
+            "casual_leave_balance": round(float(e.casual_leave_balance if e.casual_leave_balance is not None else 6.0), 1),
+            "sick_leave_balance": round(float(e.sick_leave_balance if e.sick_leave_balance is not None else 15.0), 1),
         }
         for e in emps
     ]
@@ -390,9 +393,23 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
         emp.phone = updates["phone"].strip() if updates["phone"] else None
     if "department" in updates:
         emp.department = updates["department"].strip() if updates["department"] else "العام"
+    if "annual_leave_balance" in updates and updates["annual_leave_balance"] is not None:
+        emp.annual_leave_balance = round(float(updates["annual_leave_balance"]), 2)
+    if "casual_leave_balance" in updates and updates["casual_leave_balance"] is not None:
+        emp.casual_leave_balance = round(float(updates["casual_leave_balance"]), 2)
+    if "sick_leave_balance" in updates and updates["sick_leave_balance"] is not None:
+        emp.sick_leave_balance = round(float(updates["sick_leave_balance"]), 2)
     db.commit()
     db.refresh(emp)
-    return {"message": "تم تحديث بيانات الموظف بنجاح.", "id": emp.id, "employee_code": emp.employee_code, "full_name": emp.full_name}
+    return {
+        "message": "تم تحديث بيانات الموظف بنجاح.",
+        "id": emp.id,
+        "employee_code": emp.employee_code,
+        "full_name": emp.full_name,
+        "annual_leave_balance": emp.annual_leave_balance,
+        "casual_leave_balance": emp.casual_leave_balance,
+        "sick_leave_balance": emp.sick_leave_balance,
+    }
 
 
 @router.delete("/employees/{employee_id}")
@@ -678,6 +695,17 @@ def export_attendance_report(
             pass
 
     logs = q.limit(10000).all()
+
+    # Fetch HR Requests (Leaves, Permissions, Missions) matching the same filters
+    hr_q = db.query(HRRequest).options(joinedload(HRRequest.employee)).order_by(HRRequest.created_at.desc())
+    if employee_code and employee_code.strip():
+        hr_q = hr_q.join(Employee).filter(Employee.employee_code == employee_code.strip().upper())
+    if date_from:
+        hr_q = hr_q.filter(HRRequest.end_date >= date_from)
+    if date_to:
+        hr_q = hr_q.filter(HRRequest.start_date <= date_to)
+    hr_reqs = hr_q.limit(5000).all()
+
     stamp = datetime.now(local_tz).strftime("%Y%m%d_%H%M")
 
     if format == "csv":
@@ -713,6 +741,7 @@ def export_attendance_report(
         tz_offset_hours=tz_offset,
         work_start_time=work_start,
         late_grace_minutes=late_grace,
+        hr_requests=hr_reqs,
     )
     return StreamingResponse(
         io.BytesIO(xlsx_bytes),

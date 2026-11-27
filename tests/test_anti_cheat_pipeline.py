@@ -234,13 +234,13 @@ def test_happy_path_punch_in_and_check_out_with_duplicate_guard(setup_database):
     assert res_out["success"] is True
     assert res_out["telemetry_details"]["qr_verified"] is True
 
-    # 5. Executive 3-sheet Excel (.xlsx) report & CSV export both work for authenticated admin
+    # 5. Executive 4-sheet Excel (.xlsx) report & CSV export both work for authenticated admin
     from openpyxl import load_workbook
     xlsx_res = client.get("/api/v1/admin/reports/export", headers=headers)
     assert xlsx_res.status_code == 200
     assert "spreadsheetml.sheet" in xlsx_res.headers["content-type"]
     wb = load_workbook(io.BytesIO(xlsx_res.content))
-    assert len(wb.sheetnames) == 3
+    assert len(wb.sheetnames) == 4
     ws_daily = wb.worksheets[0]
     assert ws_daily["D7"].value == "Ahmed Mostafa"
     assert ws_daily["L7"].value == "حضور مكتمل"
@@ -527,3 +527,217 @@ def test_pwa_and_static_endpoints_served():
     assert client.get("/icons/icon-192.png").status_code == 200
     assert client.get("/icons/icon-512.png").status_code == 200
     assert client.get("/kiosk/CAI-01").status_code == 200
+
+
+def test_hr_requests_leaves_permissions_missions_and_excel(setup_database):
+    """End-to-end verification of Leaves (balance deduct/refund), Permissions, Approved Missions waiving geofence (but still blocking Mock GPS), and 4-sheet Excel."""
+    from datetime import timedelta
+    from openpyxl import load_workbook
+
+    dev_token = setup_database["device_token"]
+    face_vec = setup_database["enrolled_face"]
+    fp = "sha256_hardware_fingerprint_employee_1"
+    headers = _admin_headers()
+
+    today_local = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%d")
+    tomorrow_local = (datetime.now(timezone.utc) + timedelta(hours=2) + timedelta(days=1)).strftime("%Y-%m-%d")
+    day_after_local = (datetime.now(timezone.utc) + timedelta(hours=2) + timedelta(days=2)).strftime("%Y-%m-%d")
+
+    # 1. Forged device_token is blocked (403)
+    bad = client.post(
+        "/api/v1/requests/my-summary",
+        json={"device_fingerprint": fp, "device_token": "forged_token_xyz"},
+    )
+    assert bad.status_code == 403
+
+    # 2. Employee submits 2-day Annual Leave & cancels it
+    sub1 = client.post(
+        "/api/v1/requests/submit",
+        json={
+            "device_fingerprint": fp,
+            "device_token": dev_token,
+            "request_category": "LEAVE",
+            "request_subtype": "ANNUAL",
+            "start_date": tomorrow_local,
+            "end_date": day_after_local,
+            "reason": "ظروف عائلية",
+        },
+    )
+    assert sub1.status_code == 201, sub1.text
+    req1_id = sub1.json()["request"]["id"]
+    assert sub1.json()["request"]["days_count"] == 2.0
+
+    c_res = client.post(
+        f"/api/v1/requests/{req1_id}/cancel",
+        json={"device_fingerprint": fp, "device_token": dev_token},
+    )
+    assert c_res.status_code == 200
+
+    # 3. Employee submits 2-day Annual Leave -> Admin approves -> balance drops 21 -> 19 -> Admin deletes -> refunds to 21!
+    sub2 = client.post(
+        "/api/v1/requests/submit",
+        json={
+            "device_fingerprint": fp,
+            "device_token": dev_token,
+            "request_category": "LEAVE",
+            "request_subtype": "ANNUAL",
+            "start_date": tomorrow_local,
+            "end_date": day_after_local,
+            "reason": "إجازة سنوية",
+        },
+    )
+    assert sub2.status_code == 201
+    req2_id = sub2.json()["request"]["id"]
+
+    rev = client.post(
+        f"/api/v1/admin/requests/{req2_id}/review",
+        headers=headers,
+        json={"decision": "APPROVED", "admin_notes": "بالتوفيق"},
+    )
+    assert rev.status_code == 200
+    assert rev.json()["request"]["employee_annual_balance"] == 19.0
+
+    del_res = client.delete(f"/api/v1/admin/requests/{req2_id}", headers=headers)
+    assert del_res.status_code == 200
+
+    summ = client.post("/api/v1/requests/my-summary", json={"device_fingerprint": fp, "device_token": dev_token})
+    assert summ.status_code == 200
+    assert summ.json()["balances"]["annual"] == 21.0
+
+    # 4. Admin creates an approved 1-day Casual Leave for tomorrow + Late Arrival Permission for today
+    lv_res = client.post(
+        "/api/v1/admin/requests",
+        headers=headers,
+        json={
+            "employee_code": "EMP-1001",
+            "request_category": "LEAVE",
+            "request_subtype": "CASUAL",
+            "start_date": tomorrow_local,
+            "end_date": tomorrow_local,
+            "reason": "ظرف طارئ",
+            "auto_approve": True,
+        },
+    )
+    assert lv_res.status_code == 201
+    assert lv_res.json()["request"]["employee_casual_balance"] == 5.0
+
+    perm_res = client.post(
+        "/api/v1/admin/requests",
+        headers=headers,
+        json={
+            "employee_code": "EMP-1001",
+            "request_category": "PERMISSION",
+            "request_subtype": "LATE_ARRIVAL",
+            "start_date": today_local,
+            "from_time": "09:00",
+            "to_time": "10:00",
+            "reason": "إذن تأخير صباحي",
+            "auto_approve": True,
+        },
+    )
+    assert perm_res.status_code == 201
+    assert perm_res.json()["request"]["duration_minutes"] == 60
+
+    # 5. Employee submits External Mission for today -> Admin approves -> Punch 10km outside branch SUCCEEDS!
+    miss_sub = client.post(
+        "/api/v1/requests/submit",
+        json={
+            "device_fingerprint": fp,
+            "device_token": dev_token,
+            "request_category": "MISSION",
+            "request_subtype": "EXTERNAL_MISSION",
+            "start_date": today_local,
+            "end_date": today_local,
+            "location_name": "مقر العميل - التجمع الخامس",
+            "reason": "اجتماع تسليم",
+        },
+    )
+    assert miss_sub.status_code == 201
+    miss_id = miss_sub.json()["request"]["id"]
+    assert client.post(
+        f"/api/v1/admin/requests/{miss_id}/review",
+        headers=headers,
+        json={"decision": "APPROVED"},
+    ).status_code == 200
+
+    # Verify device-session reflects active_mission_today
+    sess = client.post("/api/v1/attendance/device-session", json={"device_fingerprint": fp, "device_token": dev_token})
+    assert sess.status_code == 200
+    assert sess.json()["active_mission_today"]["location"] == "مقر العميل - التجمع الخامس"
+
+    # Punch far outside branch geofence (no office IP, no QR, no Wi-Fi) -> APPROVED via mission!
+    ch = client.post(
+        "/api/v1/attendance/challenge",
+        json={"employee_code": "EMP-1001", "device_fingerprint": fp, "device_token": dev_token},
+    ).json()
+    mission_punch = client.post(
+        "/api/v1/attendance/punch",
+        json={
+            "employee_code": "EMP-1001",
+            "punch_type": "CHECK_IN",
+            "nonce": ch["nonce"],
+            "device_fingerprint": fp,
+            "device_token": dev_token,
+            "face_embedding": face_vec,
+            "liveness_proof": {"actions_performed": ch["expected_actions"], "liveness_score": 0.96},
+            "latitude": 30.0900,
+            "longitude": 31.3000,
+            "gps_accuracy_meters": 10.0,
+            "is_mock_location": False,
+            "client_timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    ).json()
+    assert mission_punch["success"] is True, mission_punch
+    assert mission_punch["telemetry_details"]["mission_waived_geofence"] is True
+    assert mission_punch["telemetry_details"]["approved_mission"] == "مقر العميل - التجمع الخامس"
+
+    # 6. Even WITH an approved mission, Fake/Mock GPS MUST STILL BE BLOCKED!
+    ch_mock = client.post(
+        "/api/v1/attendance/challenge",
+        json={"employee_code": "EMP-1001", "device_fingerprint": fp, "device_token": dev_token},
+    ).json()
+    mock_punch = client.post(
+        "/api/v1/attendance/punch",
+        json={
+            "employee_code": "EMP-1001",
+            "punch_type": "CHECK_OUT",
+            "nonce": ch_mock["nonce"],
+            "device_fingerprint": fp,
+            "device_token": dev_token,
+            "face_embedding": face_vec,
+            "liveness_proof": {"actions_performed": ch_mock["expected_actions"], "liveness_score": 0.96},
+            "latitude": 30.0900,
+            "longitude": 31.3000,
+            "gps_accuracy_meters": 10.0,
+            "is_mock_location": True,
+            "client_timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    ).json()
+    assert mock_punch["success"] is False
+    assert "MOCK_GPS_DETECTED" in mock_punch["rejection_reason"]
+
+    # 7. Verify 4-sheet Excel report integrates approved leaves, permissions, missions & balances!
+    xlsx_res = client.get("/api/v1/admin/reports/export", headers=headers)
+    assert xlsx_res.status_code == 200
+    wb = load_workbook(io.BytesIO(xlsx_res.content))
+    assert wb.sheetnames == [
+        "الحضور اليومي (مجمّع)",
+        "ملخص الموظفين (الرواتب)",
+        "السجل التفصيلي والتدقيق",
+        "الإجازات والأذونات والمأموريات",
+    ]
+    # Sheet 1 contains both the approved leave day (tomorrow) and today's mission punch
+    ws1_statuses = [wb.worksheets[0][f"L{r}"].value for r in range(7, 12) if wb.worksheets[0][f"L{r}"].value]
+    assert any("إجازة عارضة معتمدة" in s for s in ws1_statuses), ws1_statuses
+    assert any("(مأمورية)" in s for s in ws1_statuses), ws1_statuses
+
+    # Sheet 2 Payroll Summary shows 1 leave day, 60 permission minutes, 1 mission day, 5.0 remaining casual balance
+    ws2 = wb.worksheets[1]
+    assert ws2["M5"].value == 1       # أيام إجازات معتمدة
+    assert ws2["N5"].value == 60      # دقائق أذونات معتمدة
+    assert ws2["O5"].value == 1       # أيام مأموريات معتمدة
+    assert ws2["Q5"].value == 5.0     # رصيد عارضة متبقي
+
+    # Sheet 4 lists all HR requests
+    ws4 = wb.worksheets[3]
+    assert ws4["A5"].value == "EMP-1001"

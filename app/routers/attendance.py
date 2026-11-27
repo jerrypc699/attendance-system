@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import AttendanceLog, Branch, Device, Employee, FraudAlert
+from app.models import AttendanceLog, Branch, Device, Employee, FraudAlert, HRRequest
 from app.schemas import (
     ChallengeRequest,
     ChallengeResponse,
@@ -30,6 +30,24 @@ from app.settings_store import get_runtime_settings
 from app.storage import save_snapshot_from_base64
 
 router = APIRouter(prefix="/api/v1/attendance", tags=["Attendance Punch"])
+
+
+def _get_active_mission_today(db: Session, employee_id: str, server_time: datetime, cfg: dict) -> Optional[HRRequest]:
+    """Returns an APPROVED Mission covering today's local date for this employee, if any."""
+    tz_offset = int(cfg.get("TIMEZONE_OFFSET_HOURS", 2))
+    today_local = (server_time + timedelta(hours=tz_offset)).strftime("%Y-%m-%d")
+    return (
+        db.query(HRRequest)
+        .filter(
+            HRRequest.employee_id == employee_id,
+            HRRequest.request_category == "MISSION",
+            HRRequest.status == "APPROVED",
+            HRRequest.start_date <= today_local,
+            HRRequest.end_date >= today_local,
+        )
+        .order_by(HRRequest.created_at.desc())
+        .first()
+    )
 
 
 def _find_active_employee(db: Session, employee_code: str) -> Optional[Employee]:
@@ -143,6 +161,9 @@ def resolve_bound_device_session(payload: DeviceSessionRequest, db: Session = De
     device.last_seen_at = datetime.now(timezone.utc)
     db.commit()
 
+    cfg = get_runtime_settings(db)
+    active_mission = _get_active_mission_today(db, emp.id, datetime.now(timezone.utc), cfg)
+
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
@@ -151,6 +172,11 @@ def resolve_bound_device_session(payload: DeviceSessionRequest, db: Session = De
         "is_device_bound": True,
         "requires_activation_code": not emp.is_face_enrolled,
         "last_punch_today": last_punch.punch_type if last_punch else None,
+        "active_mission_today": (
+            {"subtype": active_mission.request_subtype, "location": active_mission.location_name or "مأمورية معتمدة"}
+            if active_mission
+            else None
+        ),
         "is_active": emp.is_active,
     }
 
@@ -181,6 +207,9 @@ def get_employee_enrollment_status(employee_code: str, db: Session = Depends(get
         .first()
     )
 
+    cfg = get_runtime_settings(db)
+    active_mission = _get_active_mission_today(db, emp.id, datetime.now(timezone.utc), cfg)
+
     return {
         "employee_code": emp.employee_code,
         "full_name": emp.full_name,
@@ -189,6 +218,11 @@ def get_employee_enrollment_status(employee_code: str, db: Session = Depends(get
         "is_device_bound": bool(emp.bound_device_id),
         "requires_activation_code": not emp.is_face_enrolled,
         "last_punch_today": last_punch.punch_type if last_punch else None,
+        "active_mission_today": (
+            {"subtype": active_mission.request_subtype, "location": active_mission.location_name or "مأمورية معتمدة"}
+            if active_mission
+            else None
+        ),
         "is_active": emp.is_active,
     }
 
@@ -484,8 +518,11 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
         )
 
     # Layer 4 & 5: Geo & Physical Anchors (GPS + Office IP / Rotating QR / Wi-Fi BSSID / BLE Beacon)
+    # Also check whether the employee has an APPROVED Mission covering today (allows punching outside geofence,
+    # while STILL strictly enforcing Face AI, Hardware Binding, and Anti-Mock GPS).
+    active_mission = _get_active_mission_today(db, employee.id, server_time, cfg)
     branches = db.query(Branch).filter(Branch.is_active == True).all()
-    if not branches:
+    if not branches and not active_mission:
         raise HTTPException(status_code=500, detail="لا توجد فروع مفعلة في النظام.")
 
     target_branch = None
@@ -522,7 +559,19 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
             target_branch = branch
             best_geo_result = (geo_ok, geo_err, dist, flags)
 
-    geo_ok, geo_err, distance_m, flags = best_geo_result
+    if best_geo_result is not None:
+        geo_ok, geo_err, distance_m, flags = best_geo_result
+    else:
+        geo_ok = False
+        geo_err = "MOCK_GPS_DETECTED: تم رصد تطبيق تزييف موقع." if payload.is_mock_location else "NO_BRANCH_CONFIGURED"
+        distance_m = None
+        flags = {"wifi_matched": False, "beacon_matched": False, "office_ip_matched": False, "qr_matched": False}
+
+    # Approved Mission waives geofence / physical-anchor requirements, NEVER Fake/Mock GPS
+    mission_waived = False
+    if not geo_ok and active_mission and not payload.is_mock_location:
+        geo_ok = True
+        mission_waived = True
 
     if not geo_ok:
         db.add(
@@ -587,7 +636,7 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
     # ALL LAYERS PASSED: Record Approved Attendance Punch!
     approved_log = AttendanceLog(
         employee_id=employee.id,
-        branch_id=target_branch.id,
+        branch_id=target_branch.id if target_branch else None,
         device_id=device.id,
         punch_type=payload.punch_type,
         server_timestamp=server_time,
@@ -616,20 +665,30 @@ def verify_and_punch(payload: PunchVerificationRequest, request: Request, db: Se
     db.commit()
     db.refresh(approved_log)
 
+    punch_ar = "الحضور" if payload.punch_type == "CHECK_IN" else "الانصراف"
+    mission_label = (active_mission.location_name or active_mission.request_subtype) if active_mission else None
+    success_msg = (
+        f"تم اعتماد {punch_ar} بنجاح (مأمورية معتمدة: {mission_label})."
+        if mission_waived
+        else f"تم اعتماد {punch_ar} بنجاح."
+    )
+
     return PunchVerificationResponse(
         success=True,
         status="APPROVED",
         punch_id=approved_log.id,
         employee_name=employee.full_name,
         server_timestamp=server_time,
-        message=f"تم اعتماد {'الحضور' if payload.punch_type == 'CHECK_IN' else 'الانصراف'} بنجاح.",
+        message=success_msg,
         telemetry_details={
-            "branch": target_branch.name,
+            "branch": target_branch.name if target_branch else "مأمورية خارجية",
             "distance_meters": distance_m,
             "face_similarity": similarity,
             "liveness_score": liveness_score,
             "wifi_verified": flags["wifi_matched"],
             "office_ip_verified": flags["office_ip_matched"],
             "qr_verified": flags["qr_matched"],
+            "approved_mission": mission_label,
+            "mission_waived_geofence": mission_waived,
         },
     )
